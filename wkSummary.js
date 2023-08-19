@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name Wanikani Review Statistics
 // @namespace https://tampermonkey.net/
-// @version 0.1
+// @version 0.2
 // @description Show a popup with statistics about the review session when returning to the dashboard
 // @author leohumnew
 // @match https://www.wanikani.com/subjects/review
@@ -22,15 +22,20 @@
     let currentQuestionType = "";
     let currentCategory = "";
     let currentWord = "";
+    let currentSRSLevel = -1;
+    let quizQueueSRS = [];
+    let SRSLevelNames = ["Lesson", "Appr. I", "Appr. II", "Appr. III", "Appr. IV", "Guru I", "Guru II", "Master", "Enl.", "Burned", "Error"];
 
     // Create style element with popup styles and append it to the document head
     let style = document.createElement("style");
     style.textContent = '.summary-popup { position: fixed; width: 100%; height: 100%; z-index: 9999; color: var(--color-text); background-color: var(--color-dashboard-panel-content-background, #eee); padding: 50px; overflow-y: auto; font-size: var(--font-size-large); }';
-    style.textContent += ".summary-popup > a { background-color: transparent; text-decoration: none; text-align: center; margin: 30px 50px; position: absolute; top: 0px; right: 0px; cursor: pointer; padding: 10px; border-radius: 5px; outline: 1px solid var(--color-tertiary, black); color: var(--color-text) } .summary-popup > a:hover { color: var(--color-tertiary, #eee); }";
+    style.textContent += ".summary-popup > a { background-color: transparent; text-decoration: none; text-align: center; margin: 30px 50px; position: absolute; top: 0px; right: 0px; cursor: pointer; padding: 10px; border-radius: 5px; outline: 1px solid var(--color-tertiary, black); color: var(--color-text) } .summary-popup > a:hover { color: var(--color-tertiary, #bbb); }";
     style.textContent += ".summary-popup table { border-collapse: collapse; width: 100%; background-color: var(--color-dashboard-panel-background, #000); } .summary-popup td { border: none; padding: 5px; text-align: center}"
     style.textContent += ".summary-popup h1 { margin-bottom: 10px; font-weight: bold; font-size: var(--font-size-xlarge); } .summary-popup h2 { font-weight: bold; margin-top: 20px; padding: 20px; color: #fff; font-size: var(--font-size-large); border-radius: 5px;); }"
-    style.textContent += ".summary-popup ul { background-color: var(--color-dashboard-panel-background, #fff); } .summary-popup li { display: inline-block; } .summary-popup li a { display: block; margin: 10px; padding: 10px; color: var(--color-text-dark, #fff); font-size: var(--font-size-large); border-radius: 5px; text-decoration: none; }"
-    style.textContent += ".summary-popup .summary-popup__popup { background-color: var(--color-menu, #333); color: var(--color-text, #fff); text-decoration: none; padding: 10px; border-radius: 5px; position: absolute; z-index: 9999; display: none; font-size: var(--font-size-medium); width: 200px; box-shadow: 0 2px 3px rgba(0, 0, 0, 0.5); }";
+    style.textContent += ".summary-popup ul { background-color: var(--color-dashboard-panel-background, #fff); padding: 0 5px; } .summary-popup li { display: inline-block; } .summary-popup li a { display: block; margin: 10px 5px; padding: 10px; color: var(--color-text-dark, #fff); font-size: 1.5rem; border-radius: 5px; text-decoration: none; }"
+    style.textContent += ".summary-popup .summary-popup__popup { background-color: var(--color-menu, #333); color: var(--color-text, #fff); text-decoration: none; padding: 10px; border-radius: 5px; position: absolute; z-index: 9999; display: none; font-size: var(--font-size-medium); box-shadow: 0 2px 3px rgba(0, 0, 0, 0.5); width: fit-content; line-height: 1.3; }";
+    style.textContent += ".summary-popup .summary-popup__popup:after { content: ''; position: absolute; top: calc(50% - 5px); margin-left: -10px; width: 0; height: 0; border-left: 10px solid transparent; border-right: 10px solid transparent; border-bottom: 10px solid var(--color-menu, #333); }";
+    style.textContent += ".summary-popup .summary-popup__popup--left:after { right: 5px; transform: rotate(90deg) } .summary-popup .summary-popup__popup--right:after { left: -5px; transform: rotate(-90deg); }";
 
     document.head.appendChild(style);
 
@@ -38,6 +43,12 @@
     function percentage(numerator, denominator) {
         return Math.round(numerator / denominator * 100) + "%";
     }
+
+    // Function to get quiz queue SRS
+    function getQuizQueueSRS() {
+        quizQueueSRS = JSON.parse(document.querySelectorAll("#quiz-queue script[data-quiz-queue-target='subjectIdsWithSRS']")[0].innerHTML);
+    }
+    getQuizQueueSRS();
 
     // Function to create a popup element
     function createPopup(content) {
@@ -54,7 +65,6 @@
         popup.appendChild(content);
         popup.appendChild(closeButton);
 
-        // Return the popup element
         return popup;
     }
 
@@ -139,51 +149,53 @@
 
                 // Create popup with meaning and reading info on hover
                 let popup = document.createElement("div");
-                popup.className = "summary-popup__popup";
-                popup.innerHTML = "Meaning:<b>" + itemsList[i].meanings[0] + "</b>";
+                popup.innerHTML = "Meaning: <strong>" + itemsList[i].meanings[0] + "</strong>";
                 if(itemsList[i].type == "Kanji") {
-                    if(itemsList[i].readings[0] != undefined) {
-                        popup.innerHTML += "<br>Nanori:</b>";
-                        for(let j = 0; j < itemsList[i].readings[0].length; j++) {
-                            popup.innerHTML += itemsList[i].readings[0][j] + " ";
-                        }
-                    }
-                    if(itemsList[i].readings[1] != undefined) {
-                        popup.innerHTML += "<br>Onyomi:</b>";
-                        for(let j = 0; j < itemsList[i].readings[1].length; j++) {
-                            popup.innerHTML += itemsList[i].readings[1][j] + " ";
-                        }
-                    }
-                    if(itemsList[i].readings[2] != undefined) {
-                        popup.innerHTML += "<br>Kunyomi:</b>";
-                        for(let j = 0; j < itemsList[i].readings[2].length; j++) {
-                            popup.innerHTML += itemsList[i].readings[2][j] + " ";
+                    for (let k = 0; k < itemsList[i].readings.length; k++) {
+                        if (itemsList[i].readings[k] != null) {
+                            let label = "";
+                            switch (k) {
+                            case 0:
+                                label = "Nanori";
+                                break;
+                            case 1:
+                                label = "Onyomi";
+                                break;
+                            case 2:
+                                label = "Kunyomi";
+                                break;
+                            }
+                            popup.innerHTML += "<br>" + label + ": <strong>" + itemsList[i].readings[k].join(", ") + "</strong>";
                         }
                     }
                 }
-                if(itemsList[i].type != "Radical" && itemsList[i].readings[0] != undefined) popup.innerHTML += "<br>Reading:<b>" + itemsList[i].readings[0].reading + "</b>"
+                else if(itemsList[i].type != "Radical" && itemsList[i].readings[0] != null) {
+                    popup.innerHTML += "<br>Reading: <strong>";
+                    popup.innerHTML += itemsList[i].readings.map(r => r.reading).join(", ");
+                    popup.innerHTML += "</strong>";
+                }
+                popup.innerHTML += "<br>SRS: " + SRSLevelNames[itemsList[i].oldSRS] + " -> " + SRSLevelNames[itemsList[i].newSRS];
 
                 listItemLink.addEventListener("mouseover", function(e) {
                     // Position the popup element relative to the parent item element: to the right of the parent unless that would cause the popup to go off the screen
                     let infoPos = listItemLink.getBoundingClientRect();
                     let popupWidth = popup.getBoundingClientRect().width;
                     let popupHeight = popup.getBoundingClientRect().height;
-                    if (infoPos.right + popupWidth > window.innerWidth) {
-                        popup.style.left = (infoPos.left - popupWidth) + "px";
+                    if (infoPos.right + popupWidth + 5 > window.innerWidth) {
+                        popup.style.left = (infoPos.left - popupWidth - 5) + "px";
+                        popup.className = "summary-popup__popup summary-popup__popup--left";
                     } else {
-                        popup.style.left = infoPos.right + "px";
+                        popup.style.left = infoPos.right + 5 + "px";
+                        popup.className = "summary-popup__popup summary-popup__popup--right";
                     }
-                    if (infoPos.bottom + popupHeight > window.innerHeight) {
-                        popup.style.top = (infoPos.top - popupHeight) + "px";
-                    } else {
-                        popup.style.top = infoPos.bottom + "px";
-                    }
+                    popup.style.top = (infoPos.top + (infoPos.height / 2)) - (popupHeight / 2) + "px";
                     popup.style.display = "block";
                 });
 
                 listItemLink.addEventListener("mouseout", function(e) {
                     popup.style.display = "none";
                 });
+                popup.style.display = "none";
 
                 // Append the list item to the list
                 listItemLink.appendChild(popup);
@@ -206,19 +218,13 @@
 
             // Create a div element to wrap the table, paragraph and list
             let content = document.createElement("div");
-            content.appendChild(heading);
-            content.appendChild(table);
-            content.appendChild(incorrectTitle);
-            content.appendChild(listIncorrect);
-            content.appendChild(correctTitle);
-            content.appendChild(listCorrect);
+            content.append(heading, table, incorrectTitle, listIncorrect, correctTitle, listCorrect);
 
             // Create a popup element with the content
             let popup = createPopup(content);
 
             // Append the popup to the document body
             document.body.appendChild(popup);
-            console.log("appended");
 
             // Reset the statistics variables
             questionsAnswered = 0;
@@ -271,10 +277,11 @@
         // Get the subject data from the event detail
         let subject = e.detail.subjectWithStats.subject;
         let didSRSUp = e.detail.subjectWithStats.stats.meaning.incorrect === 0 && e.detail.subjectWithStats.stats.reading.incorrect === 0;
-        if(subject.type == "Vocabulary") {
-            let reading = subject.reading;
+        let reading = null;
+        if(subject.type == "Vocabulary" || subject.type == "KanaVocabulary") {
+            reading = subject.readings;
         } else if (subject.type == "Kanji") {
-            let reading = [3]
+            reading = [null, null, null]
             if(subject.nanori.length > 0) {
                 reading[0] = subject.nanori;
             }
@@ -286,10 +293,12 @@
             }
         }
 
-        console.log(e.detail);
+        // Calculate the new SRS level
+        let newSRSLevel = didSRSUp ? currentSRSLevel + 1 : (currentSRSLevel < 2 ? currentSRSLevel : (currentSRSLevel < 5 ? currentSRSLevel - 1 : currentSRSLevel - 2));
+        console.log(subject.characters + " - Old SRS Level: " + SRSLevelNames[currentSRSLevel] + " New SRS Level: " + SRSLevelNames[newSRSLevel]);
 
         // Push the subject data to the items list array
-        let subjectInfoToSave = { characters: subject.characters, type: subject.type, id: subject.id, SRSUp: didSRSUp, meanings: subject.meanings, readings: subject.readings };
+        let subjectInfoToSave = { characters: subject.characters, type: subject.type, id: subject.id, SRSUp: didSRSUp, meanings: subject.meanings, readings: reading, oldSRS: currentSRSLevel, newSRS: newSRSLevel };
         itemsList.push(subjectInfoToSave);
     });
 
@@ -299,6 +308,18 @@
         currentQuestionType = e.detail.questionType;
         currentCategory = e.detail.subject.type;
         currentWord = e.detail.subject.characters;
+
+        currentSRSLevel = quizQueueSRS.find(function(element) { return element[0] == e.detail.subject.id })[1];
+        if(currentSRSLevel == null) {
+            getQuizQueueSRS();
+            currentSRSLevel = quizQueueSRS.find(function(element) { return element[0] == e.detail.subject.id })[1];
+            if(currentSRSLevel == null) currentSRSLevel = 10;
+        }
+    });
+
+    // Event listener for registerWrapUpObserver event
+    window.addEventListener("registerWrapUpObserver", function(e) {
+        console.log(e);
     });
 
     // Home button override
