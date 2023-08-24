@@ -1,7 +1,8 @@
 // ==UserScript==
-// @name Wanikani Review Statistics
+// @name Wanikani Review Summary
 // @namespace https://tampermonkey.net/
-// @version 0.2
+// @version 0.3
+// @license MIT
 // @description Show a popup with statistics about the review session when returning to the dashboard
 // @author leohumnew
 // @match https://www.wanikani.com/subjects/review
@@ -18,6 +19,7 @@
     let meaningIncorrect = 0;
     let readingCorrect = 0;
     let readingIncorrect = 0;
+    let correctHistory = [];
     let itemsList = [];
     let currentQuestionType = "";
     let currentCategory = "";
@@ -28,14 +30,15 @@
 
     // Create style element with popup styles and append it to the document head
     let style = document.createElement("style");
-    style.textContent = '.summary-popup { position: fixed; width: 100%; height: 100%; z-index: 9999; color: var(--color-text); background-color: var(--color-dashboard-panel-content-background, #eee); padding: 50px; overflow-y: auto; font-size: var(--font-size-large); }';
+    style.textContent = ".summary-popup { position: fixed; width: 100%; height: 100%; z-index: 9999; color: var(--color-text); background-color: var(--color-dashboard-panel-content-background, #eee); padding: 50px; overflow-y: auto; font-size: var(--font-size-large); }";
     style.textContent += ".summary-popup > a { background-color: transparent; text-decoration: none; text-align: center; margin: 30px 50px; position: absolute; top: 0px; right: 0px; cursor: pointer; padding: 10px; border-radius: 5px; outline: 1px solid var(--color-tertiary, black); color: var(--color-text) } .summary-popup > a:hover { color: var(--color-tertiary, #bbb); }";
-    style.textContent += ".summary-popup table { border-collapse: collapse; width: 100%; background-color: var(--color-dashboard-panel-background, #000); } .summary-popup td { border: none; padding: 5px; text-align: center}"
-    style.textContent += ".summary-popup h1 { margin-bottom: 10px; font-weight: bold; font-size: var(--font-size-xlarge); } .summary-popup h2 { font-weight: bold; margin-top: 20px; padding: 20px; color: #fff; font-size: var(--font-size-large); border-radius: 5px;); }"
-    style.textContent += ".summary-popup ul { background-color: var(--color-dashboard-panel-background, #fff); padding: 0 5px; } .summary-popup li { display: inline-block; } .summary-popup li a { display: block; margin: 10px 5px; padding: 10px; color: var(--color-text-dark, #fff); font-size: 1.5rem; border-radius: 5px; text-decoration: none; }"
-    style.textContent += ".summary-popup .summary-popup__popup { background-color: var(--color-menu, #333); color: var(--color-text, #fff); text-decoration: none; padding: 10px; border-radius: 5px; position: absolute; z-index: 9999; display: none; font-size: var(--font-size-medium); box-shadow: 0 2px 3px rgba(0, 0, 0, 0.5); width: fit-content; line-height: 1.3; }";
-    style.textContent += ".summary-popup .summary-popup__popup:after { content: ''; position: absolute; top: calc(50% - 5px); margin-left: -10px; width: 0; height: 0; border-left: 10px solid transparent; border-right: 10px solid transparent; border-bottom: 10px solid var(--color-menu, #333); }";
-    style.textContent += ".summary-popup .summary-popup__popup--left:after { right: 5px; transform: rotate(90deg) } .summary-popup .summary-popup__popup--right:after { left: -5px; transform: rotate(-90deg); }";
+    style.textContent += ".summary-popup table { border-collapse: collapse; width: 100%; background-color: var(--color-dashboard-panel-background, #000); } .summary-popup td { border: none; padding: 5px; text-align: center; }";
+    style.textContent += ".summary-popup h1 { margin-bottom: 10px; font-weight: bold; font-size: var(--font-size-xlarge); } .summary-popup h2 { font-weight: bold; margin-top: 20px; padding: 20px; color: #fff; font-size: var(--font-size-large); border-radius: 5px 5px 0 0; }";
+    style.textContent += ".summary-popup ul { background-color: var(--color-dashboard-panel-background, #fff); padding: 0 5px; } .summary-popup li { display: inline-block; } .summary-popup li a { display: block; margin: 10px 5px; padding: 10px; color: var(--color-text-dark, #fff); font-size: 1.5rem; height: 2.6rem; border-radius: 5px; text-decoration: none; } .summary-popup li a img { height: 1.5rem; vertical-align: middle; }";
+    style.textContent += ".summary-popup .summary-popup__popup { background-color: var(--color-menu, #ddd); color: var(--color-text, #fff); text-decoration: none; padding: 10px; border-radius: 5px; position: fixed; z-index: 9999; display: none; font-size: var(--font-size-medium); box-shadow: 0 2px 3px rgba(0, 0, 0, 0.5); width: max-content; line-height: 1.3; }";
+    style.textContent += ".summary-popup .summary-popup__popup:after { content: ''; position: absolute; top: -8px; margin-left: -10px; width: 0; height: 0; border-left: 10px solid transparent; border-right: 10px solid transparent; border-bottom: 10px solid var(--color-menu, #ddd); }";
+    style.textContent += ".summary-popup .summary-popup__popup--left:after { right: 15px; } .summary-popup .summary-popup__popup--right:after { left: 25px; }";
+    style.textContent += ".summary-popup .accuracy-graph { height: 150px; width: 100%; background-color: var(--color-dashboard-panel-background, #fff); padding: 25px 0; } .summary-popup .accuracy-graph__line { position: relative; transform-origin: 0 0; height: 2px; background-color: var(--color-text); float: left; }";
 
     document.head.appendChild(style);
 
@@ -49,6 +52,9 @@
         quizQueueSRS = JSON.parse(document.querySelectorAll("#quiz-queue script[data-quiz-queue-target='subjectIdsWithSRS']")[0].innerHTML);
     }
     getQuizQueueSRS();
+
+    // Clear the data-quiz-queue-done-url-value parameter on #quiz-queue
+    document.getElementById("quiz-queue").setAttribute("data-quiz-queue-done-url-value", "");
 
     // Function to create a popup element
     function createPopup(content) {
@@ -74,6 +80,7 @@
         let table = document.createElement("table");
         let row = document.createElement("tr");
         let row2 = document.createElement("tr");
+        let row3 = document.createElement("tr");
 
         // Loop through the data array
         for (let i = 0; i < data.length; i++) {
@@ -82,18 +89,25 @@
             cell.textContent = data[i][0];
             cell.style.fontSize = "var(--font-size-xxlarge)";
             cell.style.fontWeight = "bold";
-            cell.style.paddingTop = "25px";
+            cell.style.padding = "25px 0 0 0";
             row.appendChild(cell);
 
             let cell2 = document.createElement("td");
             cell2.textContent = data[i][1];
-            cell2.style.fontSize = "var(--font-size-medium)";
-            cell2.style.paddingBottom = "25px";
+            cell2.style.fontSize = "var(--font-size-small)";
+            cell2.style.fontStyle = "italic";
+            cell2.style.color = "var(--color-text-mid, #999)";
+            cell2.style.padding = "0 0 10px 0";
             row2.appendChild(cell2);
+
+            let cell3 = document.createElement("td");
+            cell3.textContent = data[i][2];
+            cell3.style.fontSize = "var(--font-size-medium)";
+            cell3.style.paddingBottom = "25px";
+            row3.appendChild(cell3);
         }
         // Append the rows to the table
-        table.appendChild(row);
-        table.appendChild(row2);
+        table.append(row, row2, row3);
 
         // Return the table element
         return table;
@@ -104,20 +118,15 @@
         console.log(itemsList);
         // Check if there are any items reviewed
         if (questionsAnswered > 0) {
-            // Create an array of data for the table
-            let data = [
-                [itemsList.length, "Items Completed"],
-                [percentage(itemsCorrect, questionsAnswered), "Questions Answered Correctly"],
-                [percentage(meaningCorrect, meaningCorrect + meaningIncorrect), "Meanings Correct"],
-                [percentage(readingCorrect, readingCorrect + readingIncorrect), "Readings Correct"]
-            ]
-
-            // Create a table element with the data
-            let table = createTable(data);
-
             // Create a heading element with some text and styles
-            let heading = document.createElement("h1");
-            heading.textContent = "Review Statistics";
+            let headingText = document.createElement("h1");
+            headingText.textContent = " Review Summary";
+            let headingImage = document.createElement("div");
+            headingImage.classList = "wk-icon fa-solid fa-square-check";
+            headingImage.style.float = "left";
+            headingImage.style.margin = "2px 6px 0 0";
+            let heading = document.createElement("div");
+            heading.append(headingImage, headingText);
 
             // Create an unordered list element
             let listCorrect = document.createElement("ul");
@@ -125,6 +134,7 @@
 
             // Loop through the items list array
             let srsUpNum = 0;
+            let typeNum = [0, 0, 0];
             for (let i = 0; i < itemsList.length; i++) {
                 // Create a list item element with the character or image
                 let listItem = document.createElement("li");
@@ -149,9 +159,11 @@
 
                 // Create popup with meaning and reading info on hover
                 let popup = document.createElement("div");
-                popup.innerHTML = "Meaning: <strong>" + itemsList[i].meanings[0] + "</strong>";
+                popup.className = "summary-popup__popup";
+                popup.innerHTML = "Meaning: <strong>" + itemsList[i].meanings.slice(0, 2).join(", ") + "</strong>";
                 if(itemsList[i].type == "Kanji") {
-                    for (let k = 0; k < itemsList[i].readings.length; k++) {
+                    typeNum[1]++;
+                    for (let k = 0; k < itemsList[i].readings.length; k++) { // Nanori, Onyomi, Kunyomi readings if kanji
                         if (itemsList[i].readings[k] != null) {
                             let label = "";
                             switch (k) {
@@ -169,33 +181,39 @@
                         }
                     }
                 }
-                else if(itemsList[i].type != "Radical" && itemsList[i].readings[0] != null) {
-                    popup.innerHTML += "<br>Reading: <strong>";
-                    popup.innerHTML += itemsList[i].readings.map(r => r.reading).join(", ");
-                    popup.innerHTML += "</strong>";
+                else if(itemsList[i].type != "Radical" && itemsList[i].readings[0] != null) { // Reading if vocabulary
+                    typeNum[2]++;
+                    popup.innerHTML += "<br>Reading: <strong>" +
+                                    itemsList[i].readings.map(r => r.reading).join(", ") +
+                                    "</strong>";
+                } else { // No reading if radical
+                    typeNum[0]++;
                 }
                 popup.innerHTML += "<br>SRS: " + SRSLevelNames[itemsList[i].oldSRS] + " -> " + SRSLevelNames[itemsList[i].newSRS];
 
+                popup.style.display = "block";
+                popup.style.visibility = "hidden";
                 listItemLink.addEventListener("mouseover", function(e) {
                     // Position the popup element relative to the parent item element: to the right of the parent unless that would cause the popup to go off the screen
                     let infoPos = listItemLink.getBoundingClientRect();
-                    let popupWidth = popup.getBoundingClientRect().width;
-                    let popupHeight = popup.getBoundingClientRect().height;
-                    if (infoPos.right + popupWidth + 5 > window.innerWidth) {
-                        popup.style.left = (infoPos.left - popupWidth - 5) + "px";
+                    let popupPos = popup.getBoundingClientRect();
+                    if (infoPos.left + popupPos.width + 5 > window.innerWidth) {
+                        popup.style.right = window.innerWidth - infoPos.right + "px";
+                        popup.style.removeProperty("left");
                         popup.className = "summary-popup__popup summary-popup__popup--left";
                     } else {
-                        popup.style.left = infoPos.right + 5 + "px";
+                        popup.style.left = infoPos.left + "px";
+                        popup.style.removeProperty("right");
                         popup.className = "summary-popup__popup summary-popup__popup--right";
                     }
-                    popup.style.top = (infoPos.top + (infoPos.height / 2)) - (popupHeight / 2) + "px";
-                    popup.style.display = "block";
+                    popup.style.top = infoPos.bottom + 5 + "px";
+                    popup.style.visibility = "visible";
                 });
 
                 listItemLink.addEventListener("mouseout", function(e) {
-                    popup.style.display = "none";
+                    popup.style.visibility = "hidden";
                 });
-                popup.style.display = "none";
+                popup.style.visibility = "hidden";
 
                 // Append the list item to the list
                 listItemLink.appendChild(popup);
@@ -207,6 +225,15 @@
                 else listIncorrect.appendChild(listItem);
             }
 
+            // Create a header table with main stats
+            let data = [
+                [itemsList.length, "R: " + typeNum[0] + " / K: " + typeNum[1] + " / V: " + typeNum[2], "Items Completed"],
+                [percentage(itemsCorrect, questionsAnswered), itemsCorrect + " out of " + questionsAnswered , "Questions Answered Correctly"],
+                [percentage(meaningCorrect, meaningCorrect + meaningIncorrect), meaningCorrect + " out of " + (meaningCorrect + meaningIncorrect), "Meanings Correct"],
+                [percentage(readingCorrect, readingCorrect + readingIncorrect), readingCorrect + " out of " + (readingCorrect + readingIncorrect), "Readings Correct"]
+            ];
+            let table = createTable(data);
+
             // Create h2 titles for the lists
             let correctTitle = document.createElement("h2");
             correctTitle.textContent = srsUpNum + " Items SRS Up";
@@ -216,15 +243,60 @@
             incorrectTitle.textContent = (itemsList.length - srsUpNum) + " Items SRS Down";
             incorrectTitle.style.backgroundColor = "var(--color-quiz-incorrect-background, #ff0033)";
 
-            // Create a div element to wrap the table, paragraph and list
+            // Create a div element to wrap everything
             let content = document.createElement("div");
             content.append(heading, table, incorrectTitle, listIncorrect, correctTitle, listCorrect);
 
+            // Create a graph showing accuracy throughout the session using the correctHistory array, with an average of 3 elements
+            if(itemsList.length > 4) {
+                // Title h2
+                let graphTitle = document.createElement("h2");
+                graphTitle.textContent = "Session Accuracy";
+                graphTitle.style.backgroundColor = "var(--color-menu, #777)";
+                // Graph
+                let graph = document.createElement("div");
+                graph.classList = "accuracy-graph";
+
+                // Wrapper
+                let graphWrapper = document.createElement("div");
+                graphWrapper.append(graphTitle, graph);
+                content.appendChild(graphWrapper);
+            }
+
             // Create a popup element with the content
             let popup = createPopup(content);
-
-            // Append the popup to the document body
             document.body.appendChild(popup);
+
+            // Fill the graph with the correctHistory array
+            if(itemsList.length > 4) {
+                let graphDiv = document.querySelector(".accuracy-graph");
+                // Calculate graph data
+                let graphData = [];
+                for (let i = 1; i < correctHistory.length - 1; i++) {
+                    graphData.push((correctHistory[i-1] + correctHistory[i] + correctHistory[i+1]) / 3);
+                }
+                let graphHeight = 100;
+                let graphWidth = graphDiv.getBoundingClientRect().width;
+                let graphStep = graphWidth / graphData.length;
+                graphDiv.style.paddingLeft = graphStep / 2 + "px";
+                let prevPos = {x: null, y: null};
+                for (let i = 0; i < graphData.length; i++) {
+                    let x = graphStep * i;
+                    let y = graphHeight - (graphData[i] * graphHeight);
+                    if(prevPos.x != null) {
+                        let line = document.createElement("div");
+                        line.classList = "accuracy-graph__line";
+                        let lineWidth = Math.sqrt(Math.pow(x - prevPos.x, 2) + Math.pow(y - prevPos.y, 2));
+                        line.style.width = lineWidth + "px";
+                        let rotation = Math.atan2(y - prevPos.y, x - prevPos.x);
+                        line.style.transform = "rotate(" + rotation + "rad)";
+                        if(rotation != 0) line.style.marginRight = Math.cos(rotation) * lineWidth - lineWidth + "px";
+                        line.style.top = prevPos.y + "px";
+                        graphDiv.appendChild(line);
+                    }
+                    prevPos = {x: x, y: y};
+                }
+            }
 
             // Reset the statistics variables
             questionsAnswered = 0;
@@ -238,38 +310,24 @@
         }
     }
 
+    let eventToObserve = window.doublecheck == null ? "didAnswerQuestion" : "didFinalAnswer";
     // Add an event listener for the didAnswerQuestion event
-    window.addEventListener("didAnswerQuestion", function(e) {
+    window.addEventListener(eventToObserve, function(e) {
         // Check if the answer was correct or not by looking for the correct attribute
         let correct = document.querySelector(".quiz-input__input-container[correct='true']") !== null;
 
-        // Increment the items reviewed counter
+        // Push value to correct history array: 1 if correct, 0 if incorrect
+        correctHistory.push(correct);
+
+        // Increment the questions answered and correct/incorrect counters
         questionsAnswered++;
-
-        // Increment the appropriate counters based on the question type and correctness
         if (currentQuestionType === "meaning") {
-            if (correct) {
-                meaningCorrect++;
-            } else {
-                meaningIncorrect++;
-            }
+            correct ? meaningCorrect++ : meaningIncorrect++;
         } else if (currentQuestionType === "reading") {
-            if (correct) {
-                readingCorrect++;
-            } else {
-                readingIncorrect++;
-            }
+            correct ? readingCorrect++ : readingIncorrect++;
         }
-
-        // Increment the overall correct or incorrect counter
-        if (correct) {
-            itemsCorrect++;
-        } else {
-            itemsIncorrect++;
-        }
-
-        // Log the result to the console for debugging purposes
-        console.log(currentWord, currentQuestionType, currentCategory, correct);
+        if (correct) itemsCorrect++;
+        else itemsIncorrect++;
     });
 
     // Add an event listener for the didCompleteSubject event
@@ -281,7 +339,7 @@
         if(subject.type == "Vocabulary" || subject.type == "KanaVocabulary") {
             reading = subject.readings;
         } else if (subject.type == "Kanji") {
-            reading = [null, null, null]
+            reading = [null, null, null];
             if(subject.nanori.length > 0) {
                 reading[0] = subject.nanori;
             }
@@ -309,17 +367,17 @@
         currentCategory = e.detail.subject.type;
         currentWord = e.detail.subject.characters;
 
-        currentSRSLevel = quizQueueSRS.find(function(element) { return element[0] == e.detail.subject.id })[1];
+        currentSRSLevel = quizQueueSRS.find(function(element) { return element[0] == e.detail.subject.id; })[1];
         if(currentSRSLevel == null) {
             getQuizQueueSRS();
-            currentSRSLevel = quizQueueSRS.find(function(element) { return element[0] == e.detail.subject.id })[1];
+            currentSRSLevel = quizQueueSRS.find(function(element) { return element[0] == e.detail.subject.id; })[1];
             if(currentSRSLevel == null) currentSRSLevel = 10;
         }
     });
 
-    // Event listener for registerWrapUpObserver event
-    window.addEventListener("registerWrapUpObserver", function(e) {
-        console.log(e);
+    // Add an event listener for the turbo before-visit event
+    window.addEventListener("turbo:before-visit", function(e) {       
+        showStatistics();
     });
 
     // Home button override
