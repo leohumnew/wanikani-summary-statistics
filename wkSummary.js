@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name Wanikani Review Summary
 // @namespace https://tampermonkey.net/
-// @version 0.3
+// @version 0.3.1
 // @license MIT
 // @description Show a popup with statistics about the review session when returning to the dashboard
 // @author leohumnew
@@ -44,6 +44,7 @@
 
     // Function to calculate the percentage
     function percentage(numerator, denominator) {
+        if(denominator == 0) return "--";
         return Math.round(numerator / denominator * 100) + "%";
     }
 
@@ -236,11 +237,17 @@
 
             // Create h2 titles for the lists
             let correctTitle = document.createElement("h2");
-            correctTitle.textContent = srsUpNum + " Items SRS Up";
+            let correctTitleIcon = document.createElement("span");
+            correctTitleIcon.classList = "wk-icon fa-solid fa-circle-up";
+            correctTitle.appendChild(correctTitleIcon);
+            correctTitle.innerHTML += " " + srsUpNum + " Items SRS Up";
             correctTitle.style.backgroundColor = "var(--color-quiz-correct-background, #88cc00)";
 
             let incorrectTitle = document.createElement("h2");
-            incorrectTitle.textContent = (itemsList.length - srsUpNum) + " Items SRS Down";
+            let incorrectTitleIcon = document.createElement("span");
+            incorrectTitleIcon.classList = "wk-icon fa-solid fa-circle-down";
+            incorrectTitle.appendChild(incorrectTitleIcon);
+            incorrectTitle.innerHTML += " " + (itemsList.length - srsUpNum) + " Items SRS Down";
             incorrectTitle.style.backgroundColor = "var(--color-quiz-incorrect-background, #ff0033)";
 
             // Create a div element to wrap everything
@@ -251,7 +258,10 @@
             if(itemsList.length > 4) {
                 // Title h2
                 let graphTitle = document.createElement("h2");
-                graphTitle.textContent = "Session Accuracy";
+                let graphTitleIcon = document.createElement("span");
+                graphTitleIcon.classList = "wk-icon fa-solid fa-chart-simple";
+                graphTitle.appendChild(graphTitleIcon);
+                graphTitle.innerHTML += " Session Accuracy";
                 graphTitle.style.backgroundColor = "var(--color-menu, #777)";
                 // Graph
                 let graph = document.createElement("div");
