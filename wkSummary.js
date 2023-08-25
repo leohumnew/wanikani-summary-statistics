@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name Wanikani Review Summary
 // @namespace https://tampermonkey.net/
-// @version 0.3.1
+// @version 0.3.5
 // @license MIT
 // @description Show a popup with statistics about the review session when returning to the dashboard
 // @author leohumnew
@@ -30,15 +30,16 @@
 
     // Create style element with popup styles and append it to the document head
     let style = document.createElement("style");
-    style.textContent = ".summary-popup { position: fixed; width: 100%; height: 100%; z-index: 9999; color: var(--color-text); background-color: var(--color-dashboard-panel-content-background, #eee); padding: 50px; overflow-y: auto; font-size: var(--font-size-large); }";
+    style.textContent = ".summary-popup { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 9999; color: var(--color-text); background-color: var(--color-dashboard-panel-content-background, #eee); padding: 50px; overflow-y: auto; font-size: var(--font-size-large); }";
     style.textContent += ".summary-popup > a { background-color: transparent; text-decoration: none; text-align: center; margin: 30px 50px; position: absolute; top: 0px; right: 0px; cursor: pointer; padding: 10px; border-radius: 5px; outline: 1px solid var(--color-tertiary, black); color: var(--color-text) } .summary-popup > a:hover { color: var(--color-tertiary, #bbb); }";
-    style.textContent += ".summary-popup table { border-collapse: collapse; width: 100%; background-color: var(--color-dashboard-panel-background, #000); } .summary-popup td { border: none; padding: 5px; text-align: center; }";
+    style.textContent += ".summary-popup table { border-collapse: collapse; border-radius: 5px; width: 100%; background-color: var(--color-dashboard-panel-background, #000); } .summary-popup td { border: none; padding: 5px; text-align: center; }";
     style.textContent += ".summary-popup h1 { margin-bottom: 10px; font-weight: bold; font-size: var(--font-size-xlarge); } .summary-popup h2 { font-weight: bold; margin-top: 20px; padding: 20px; color: #fff; font-size: var(--font-size-large); border-radius: 5px 5px 0 0; }";
-    style.textContent += ".summary-popup ul { background-color: var(--color-dashboard-panel-background, #fff); padding: 0 5px; } .summary-popup li { display: inline-block; } .summary-popup li a { display: block; margin: 10px 5px; padding: 10px; color: var(--color-text-dark, #fff); font-size: 1.5rem; height: 2.6rem; border-radius: 5px; text-decoration: none; } .summary-popup li a img { height: 1.5rem; vertical-align: middle; }";
+    style.textContent += ".summary-popup ul { background-color: var(--color-dashboard-panel-background, #fff); padding: 5px; border-radius: 0 0 5px 5px; } .summary-popup li { display: inline-block; } .summary-popup li a { display: block; margin: 10px 5px; padding: 10px; color: var(--color-text-dark, #fff); font-size: 1.5rem; height: 2.6rem; border-radius: 5px; text-decoration: none; position: relative; } .summary-popup li a img { height: 1.5rem; vertical-align: middle; }";
     style.textContent += ".summary-popup .summary-popup__popup { background-color: var(--color-menu, #ddd); color: var(--color-text, #fff); text-decoration: none; padding: 10px; border-radius: 5px; position: fixed; z-index: 9999; display: none; font-size: var(--font-size-medium); box-shadow: 0 2px 3px rgba(0, 0, 0, 0.5); width: max-content; line-height: 1.3; }";
     style.textContent += ".summary-popup .summary-popup__popup:after { content: ''; position: absolute; top: -8px; margin-left: -10px; width: 0; height: 0; border-left: 10px solid transparent; border-right: 10px solid transparent; border-bottom: 10px solid var(--color-menu, #ddd); }";
     style.textContent += ".summary-popup .summary-popup__popup--left:after { right: 15px; } .summary-popup .summary-popup__popup--right:after { left: 25px; }";
     style.textContent += ".summary-popup .accuracy-graph { height: 150px; width: 100%; background-color: var(--color-dashboard-panel-background, #fff); padding: 25px 0; } .summary-popup .accuracy-graph__line { position: relative; transform-origin: 0 0; height: 2px; background-color: var(--color-text); float: left; }";
+    style.textContent += ".summary-popup ul .wk-icon { position: absolute; top: -8px; right: -8px; font-size: var(--font-size-xsmall); color: white; background-color: var(--color-burned); padding: 3px; border-radius: 50%; border: white solid 1px; }";
 
     document.head.appendChild(style);
 
@@ -54,8 +55,17 @@
     }
     getQuizQueueSRS();
 
-    // Clear the data-quiz-queue-done-url-value parameter on #quiz-queue
-    document.getElementById("quiz-queue").setAttribute("data-quiz-queue-done-url-value", "");
+    function injectEndCode() {
+        // Clear the data-quiz-queue-done-url-value and data-quiz-queue-completion-url-value parameters on #quiz-queue
+        //document.getElementById("quiz-queue").setAttribute("data-quiz-queue-done-url-value", "");
+        function get_controller(name) {
+            return Stimulus.getControllerForElementAndIdentifier(document.querySelector(`[data-controller~="${name}"]`),name);
+        }
+        let quizQueueController = get_controller("quiz-queue");
+        let quizOnDoneReplacement = function() { showStatistics(); };
+        quizQueueController.onDone = quizOnDoneReplacement.bind(quizQueueController);
+        quizQueueController.quizQueue.onDone = quizQueueController.onDone;
+    }
 
     // Function to create a popup element
     function createPopup(content) {
@@ -98,7 +108,7 @@
             cell2.style.fontSize = "var(--font-size-small)";
             cell2.style.fontStyle = "italic";
             cell2.style.color = "var(--color-text-mid, #999)";
-            cell2.style.padding = "0 0 10px 0";
+            cell2.style.padding = "4px 0 10px 0";
             row2.appendChild(cell2);
 
             let cell3 = document.createElement("td");
@@ -121,13 +131,12 @@
         if (questionsAnswered > 0) {
             // Create a heading element with some text and styles
             let headingText = document.createElement("h1");
-            headingText.textContent = " Review Summary";
-            let headingImage = document.createElement("div");
+            let headingImage = document.createElement("span");
             headingImage.classList = "wk-icon fa-solid fa-square-check";
-            headingImage.style.float = "left";
-            headingImage.style.margin = "2px 6px 0 0";
+            headingText.appendChild(headingImage);
+            headingText.innerHTML += " Review Summary";
             let heading = document.createElement("div");
-            heading.append(headingImage, headingText);
+            heading.append(headingText);
 
             // Create an unordered list element
             let listCorrect = document.createElement("ul");
@@ -156,6 +165,14 @@
                 else {
                     listItemLink.style.backgroundColor = "var(--color-vocabulary, #aa00ff)";
                     listItemLink.href = "https://www.wanikani.com/vocabulary/" + itemsList[i].characters;
+                }
+
+                // Badge if burned
+                if(itemsList[i].newSRS == 9) {
+                    let badge = document.createElement("span");
+                    badge.classList = "wk-icon fa-solid fa-fire";
+                    listItemLink.style.paddingRight = "15px";
+                    listItemLink.appendChild(badge);
                 }
 
                 // Create popup with meaning and reading info on hover
@@ -229,7 +246,8 @@
             // Create a header table with main stats
             let data = [
                 [itemsList.length, "R: " + typeNum[0] + " / K: " + typeNum[1] + " / V: " + typeNum[2], "Items Completed"],
-                [percentage(itemsCorrect, questionsAnswered), itemsCorrect + " out of " + questionsAnswered , "Questions Answered Correctly"],
+                [percentage(srsUpNum, itemsList.length), srsUpNum + " out of " + itemsList.length, "Items Correct"],
+                [percentage(itemsCorrect, questionsAnswered), itemsCorrect + " out of " + questionsAnswered , "Questions Correct"],
                 [percentage(meaningCorrect, meaningCorrect + meaningIncorrect), meaningCorrect + " out of " + (meaningCorrect + meaningIncorrect), "Meanings Correct"],
                 [percentage(readingCorrect, readingCorrect + readingIncorrect), readingCorrect + " out of " + (readingCorrect + readingIncorrect), "Readings Correct"]
             ];
@@ -264,7 +282,7 @@
                 graphTitle.innerHTML += " Session Accuracy";
                 graphTitle.style.backgroundColor = "var(--color-menu, #777)";
                 // Graph
-                let graph = document.createElement("div");
+                let graph = document.createElement("div"); // canvas
                 graph.classList = "accuracy-graph";
 
                 // Wrapper
@@ -289,6 +307,9 @@
                 let graphWidth = graphDiv.getBoundingClientRect().width;
                 let graphStep = graphWidth / graphData.length;
                 graphDiv.style.paddingLeft = graphStep / 2 + "px";
+                // let ctx = graphDiv.getContext("2d");
+                // ctx.strokeStyle = "var(--color-text)";
+                // ctx.beginPath();
                 let prevPos = {x: null, y: null};
                 for (let i = 0; i < graphData.length; i++) {
                     let x = graphStep * i;
@@ -305,7 +326,10 @@
                         graphDiv.appendChild(line);
                     }
                     prevPos = {x: x, y: y};
+                    // if(i == 0) ctx.moveTo(x, y);
+                    // else ctx.lineTo(x, y);
                 }
+                // ctx.stroke();
             }
 
             // Reset the statistics variables
@@ -323,6 +347,9 @@
     let eventToObserve = window.doublecheck == null ? "didAnswerQuestion" : "didFinalAnswer";
     // Add an event listener for the didAnswerQuestion event
     window.addEventListener(eventToObserve, function(e) {
+        if(questionsAnswered == 0) {
+            injectEndCode();
+        }
         // Check if the answer was correct or not by looking for the correct attribute
         let correct = document.querySelector(".quiz-input__input-container[correct='true']") !== null;
 
@@ -386,7 +413,8 @@
     });
 
     // Add an event listener for the turbo before-visit event
-    window.addEventListener("turbo:before-visit", function(e) {       
+    window.addEventListener("turbo:before-visit", function(e) {
+        e.preventDefault();
         showStatistics();
     });
 
