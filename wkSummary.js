@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name Wanikani Review Summary
 // @namespace https://tampermonkey.net/
-// @version 0.3.5
+// @version 0.3.6
 // @license MIT
 // @description Show a popup with statistics about the review session when returning to the dashboard
 // @author leohumnew
@@ -38,7 +38,8 @@
     style.textContent += ".summary-popup .summary-popup__popup { background-color: var(--color-menu, #ddd); color: var(--color-text, #fff); text-decoration: none; padding: 10px; border-radius: 5px; position: fixed; z-index: 9999; display: none; font-size: var(--font-size-medium); box-shadow: 0 2px 3px rgba(0, 0, 0, 0.5); width: max-content; line-height: 1.3; }";
     style.textContent += ".summary-popup .summary-popup__popup:after { content: ''; position: absolute; top: -8px; margin-left: -10px; width: 0; height: 0; border-left: 10px solid transparent; border-right: 10px solid transparent; border-bottom: 10px solid var(--color-menu, #ddd); }";
     style.textContent += ".summary-popup .summary-popup__popup--left:after { right: 15px; } .summary-popup .summary-popup__popup--right:after { left: 25px; }";
-    style.textContent += ".summary-popup .accuracy-graph { height: 150px; width: 100%; background-color: var(--color-dashboard-panel-background, #fff); padding: 25px 0; } .summary-popup .accuracy-graph__line { position: relative; transform-origin: 0 0; height: 2px; background-color: var(--color-text); float: left; }";
+    style.textContent += ".summary-popup .accuracy-graph { position: relative; height: 150px; width: 100%; background-color: var(--color-dashboard-panel-background, #fff); padding: 25px 0; border-radius: 0 0 5px 5px; } .summary-popup .accuracy-graph__line { position: relative; transform-origin: 0 0; height: 2px; background-color: var(--color-text); float: left; }";
+    style.textContent += ".summary-popup .accuracy-graph span { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: var(--font-size-xlarge); color: var(--color-text); }";
     style.textContent += ".summary-popup ul .wk-icon { position: absolute; top: -8px; right: -8px; font-size: var(--font-size-xsmall); color: white; background-color: var(--color-burned); padding: 3px; border-radius: 50%; border: white solid 1px; }";
 
     document.head.appendChild(style);
@@ -306,14 +307,20 @@
                 let graphHeight = 100;
                 let graphWidth = graphDiv.getBoundingClientRect().width;
                 let graphStep = graphWidth / graphData.length;
+                // console.log(graphHeight + ", " + graphWidth + ", " + graphStep);
                 graphDiv.style.paddingLeft = graphStep / 2 + "px";
+                // graphDiv.width = graphDiv.clientWidth;
+                // graphDiv.height = graphDiv.clientHeight;
                 // let ctx = graphDiv.getContext("2d");
-                // ctx.strokeStyle = "var(--color-text)";
+                // ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--color-text');
+                // ctx.lineWidth = 2;
                 // ctx.beginPath();
                 let prevPos = {x: null, y: null};
+                let isAllPerfect = true;
                 for (let i = 0; i < graphData.length; i++) {
                     let x = graphStep * i;
                     let y = graphHeight - (graphData[i] * graphHeight);
+                    if(graphData[i] != 1) isAllPerfect = false;
                     if(prevPos.x != null) {
                         let line = document.createElement("div");
                         line.classList = "accuracy-graph__line";
@@ -326,8 +333,14 @@
                         graphDiv.appendChild(line);
                     }
                     prevPos = {x: x, y: y};
+                    // console.log(x + ", " + y);
                     // if(i == 0) ctx.moveTo(x, y);
                     // else ctx.lineTo(x, y);
+                }
+                if(isAllPerfect) {
+                    let congratulationMessage = document.createElement("span");
+                    congratulationMessage.textContent = "🎊 Perfect session! 🎊";
+                    graphDiv.appendChild(congratulationMessage);
                 }
                 // ctx.stroke();
             }
