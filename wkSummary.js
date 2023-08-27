@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name Wanikani Review Summary
 // @namespace https://tampermonkey.net/
-// @version 0.3.6
+// @version 0.3.7
 // @license MIT
 // @description Show a popup with statistics about the review session when returning to the dashboard
 // @author leohumnew
@@ -40,7 +40,7 @@
     style.textContent += ".summary-popup .summary-popup__popup--left:after { right: 15px; } .summary-popup .summary-popup__popup--right:after { left: 25px; }";
     style.textContent += ".summary-popup .accuracy-graph { position: relative; height: 150px; width: 100%; background-color: var(--color-dashboard-panel-background, #fff); padding: 25px 0; border-radius: 0 0 5px 5px; } .summary-popup .accuracy-graph__line { position: relative; transform-origin: 0 0; height: 2px; background-color: var(--color-text); float: left; }";
     style.textContent += ".summary-popup .accuracy-graph span { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: var(--font-size-xlarge); color: var(--color-text); }";
-    style.textContent += ".summary-popup ul .wk-icon { position: absolute; top: -8px; right: -8px; font-size: var(--font-size-xsmall); color: white; background-color: var(--color-burned); padding: 3px; border-radius: 50%; border: white solid 1px; }";
+    style.textContent += ".summary-popup ul .wk-icon { position: absolute; top: -8px; right: -8px; font-size: var(--font-size-xsmall); width: 1.5em; text-align: center; color: white; background-color: var(--color-burned); padding: 3px; border-radius: 50%; border: white solid 1px; }";
 
     document.head.appendChild(style);
 
@@ -168,10 +168,15 @@
                     listItemLink.href = "https://www.wanikani.com/vocabulary/" + itemsList[i].characters;
                 }
 
-                // Badge if burned
+                // Badge if burned or if warning
                 if(itemsList[i].newSRS == 9) {
                     let badge = document.createElement("span");
                     badge.classList = "wk-icon fa-solid fa-fire";
+                    listItemLink.style.paddingRight = "15px";
+                    listItemLink.appendChild(badge);
+                } else if(itemsList[i].isWarning) {
+                    let badge = document.createElement("span");
+                    badge.classList = "wk-icon fa-solid fa-skull-crossbones";
                     listItemLink.style.paddingRight = "15px";
                     listItemLink.appendChild(badge);
                 }
@@ -401,12 +406,14 @@
             }
         }
 
+        let isWarning = e.detail.subjectWithStats.stats.meaning.incorrect + e.detail.subjectWithStats.stats.reading.incorrect > 2;
+
         // Calculate the new SRS level
         let newSRSLevel = didSRSUp ? currentSRSLevel + 1 : (currentSRSLevel < 2 ? currentSRSLevel : (currentSRSLevel < 5 ? currentSRSLevel - 1 : currentSRSLevel - 2));
         console.log(subject.characters + " - Old SRS Level: " + SRSLevelNames[currentSRSLevel] + " New SRS Level: " + SRSLevelNames[newSRSLevel]);
 
         // Push the subject data to the items list array
-        let subjectInfoToSave = { characters: subject.characters, type: subject.type, id: subject.id, SRSUp: didSRSUp, meanings: subject.meanings, readings: reading, oldSRS: currentSRSLevel, newSRS: newSRSLevel };
+        let subjectInfoToSave = { characters: subject.characters, type: subject.type, id: subject.id, SRSUp: didSRSUp, meanings: subject.meanings, readings: reading, oldSRS: currentSRSLevel, newSRS: newSRSLevel, isWarning: isWarning };
         itemsList.push(subjectInfoToSave);
     });
 
