@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name Wanikani Review Summary
 // @namespace https://tampermonkey.net/
-// @version 0.3.7
+// @version 0.4.0
 // @license MIT
 // @description Show a popup with statistics about the review session when returning to the dashboard
 // @author leohumnew
@@ -20,7 +20,8 @@
     let readingCorrect = 0;
     let readingIncorrect = 0;
     let correctHistory = [];
-    let itemsList = [];
+    let incorrectEntered = new Map();
+    let itemsList = []; // Array to store the items reviewed
     let currentQuestionType = "";
     let currentCategory = "";
     let currentWord = "";
@@ -38,9 +39,10 @@
     style.textContent += ".summary-popup .summary-popup__popup { background-color: var(--color-menu, #ddd); color: var(--color-text, #fff); text-decoration: none; padding: 10px; border-radius: 5px; position: fixed; z-index: 9999; display: none; font-size: var(--font-size-medium); box-shadow: 0 2px 3px rgba(0, 0, 0, 0.5); width: max-content; line-height: 1.3; }";
     style.textContent += ".summary-popup .summary-popup__popup:after { content: ''; position: absolute; top: -8px; margin-left: -10px; width: 0; height: 0; border-left: 10px solid transparent; border-right: 10px solid transparent; border-bottom: 10px solid var(--color-menu, #ddd); }";
     style.textContent += ".summary-popup .summary-popup__popup--left:after { right: 15px; } .summary-popup .summary-popup__popup--right:after { left: 25px; }";
-    style.textContent += ".summary-popup .accuracy-graph { position: relative; height: 150px; width: 100%; background-color: var(--color-dashboard-panel-background, #fff); padding: 25px 0; border-radius: 0 0 5px 5px; } .summary-popup .accuracy-graph__line { position: relative; transform-origin: 0 0; height: 2px; background-color: var(--color-text); float: left; }";
+    style.textContent += ".summary-popup .accuracy-graph { position: relative; height: 152px; width: 100%; background-color: var(--color-dashboard-panel-background, #fff); padding: 25px 2.5%; border-radius: 0 0 5px 5px; }";
     style.textContent += ".summary-popup .accuracy-graph span { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: var(--font-size-xlarge); color: var(--color-text); }";
     style.textContent += ".summary-popup ul .wk-icon { position: absolute; top: -8px; right: -8px; font-size: var(--font-size-xsmall); width: 1.5em; text-align: center; color: white; background-color: var(--color-burned); padding: 3px; border-radius: 50%; border: white solid 1px; }";
+    style.textContent += ".summary-popup ul .incorrect-text { color: var(--color-incorrect, #cc4343); font-size: var(--font-size-small); vertical-align: top; }";
 
     document.head.appendChild(style);
 
@@ -59,7 +61,7 @@
     function injectEndCode() {
         // Clear the data-quiz-queue-done-url-value and data-quiz-queue-completion-url-value parameters on #quiz-queue
         //document.getElementById("quiz-queue").setAttribute("data-quiz-queue-done-url-value", "");
-        function get_controller(name) {
+        function get_controller(name) { // Thanks to @rfindley for this function
             return Stimulus.getControllerForElementAndIdentifier(document.querySelector(`[data-controller~="${name}"]`),name);
         }
         let quizQueueController = get_controller("quiz-queue");
@@ -185,6 +187,7 @@
                 let popup = document.createElement("div");
                 popup.className = "summary-popup__popup";
                 popup.innerHTML = "Meaning: <strong>" + itemsList[i].meanings.slice(0, 2).join(", ") + "</strong>";
+                if(itemsList[i].incorrectEntered != null && itemsList[i].incorrectEntered[0].length > 0) popup.innerHTML += '<br><span class="incorrect-text">&nbsp;&nbsp;&nbsp;<strong>X</strong>&nbsp;' + itemsList[i].incorrectEntered[0].join(", ") + "</span>";
                 if(itemsList[i].type == "Kanji") {
                     typeNum[1]++;
                     for (let k = 0; k < itemsList[i].readings.length; k++) { // Nanori, Onyomi, Kunyomi readings if kanji
@@ -213,6 +216,7 @@
                 } else { // No reading if radical
                     typeNum[0]++;
                 }
+                if(itemsList[i].incorrectEntered != null && itemsList[i].incorrectEntered[1].length > 0) popup.innerHTML += '<br><span class="incorrect-text">&nbsp;&nbsp;&nbsp;<strong>X</strong>&nbsp;' + itemsList[i].incorrectEntered[1].join(", ") + "</span>";
                 popup.innerHTML += "<br>SRS: " + SRSLevelNames[itemsList[i].oldSRS] + " -> " + SRSLevelNames[itemsList[i].newSRS];
 
                 popup.style.display = "block";
@@ -288,12 +292,16 @@
                 graphTitle.innerHTML += " Session Accuracy";
                 graphTitle.style.backgroundColor = "var(--color-menu, #777)";
                 // Graph
-                let graph = document.createElement("div"); // canvas
-                graph.classList = "accuracy-graph";
+                let graphDiv = document.createElement("div");
+                graphDiv.classList = "accuracy-graph";
+                let graph = document.createElement("canvas");
+                graph.style.width = "100%";
+                graph.style.height = "100%";
+                graphDiv.appendChild(graph);
 
                 // Wrapper
                 let graphWrapper = document.createElement("div");
-                graphWrapper.append(graphTitle, graph);
+                graphWrapper.append(graphTitle, graphDiv);
                 content.appendChild(graphWrapper);
             }
 
@@ -304,50 +312,49 @@
             // Fill the graph with the correctHistory array
             if(itemsList.length > 4) {
                 let graphDiv = document.querySelector(".accuracy-graph");
+                let graph = document.querySelector(".accuracy-graph canvas");
                 // Calculate graph data
                 let graphData = [];
                 for (let i = 1; i < correctHistory.length - 1; i++) {
                     graphData.push((correctHistory[i-1] + correctHistory[i] + correctHistory[i+1]) / 3);
                 }
                 let graphHeight = 100;
-                let graphWidth = graphDiv.getBoundingClientRect().width;
-                let graphStep = graphWidth / graphData.length;
-                // console.log(graphHeight + ", " + graphWidth + ", " + graphStep);
-                graphDiv.style.paddingLeft = graphStep / 2 + "px";
-                // graphDiv.width = graphDiv.clientWidth;
-                // graphDiv.height = graphDiv.clientHeight;
-                // let ctx = graphDiv.getContext("2d");
-                // ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--color-text');
-                // ctx.lineWidth = 2;
-                // ctx.beginPath();
-                let prevPos = {x: null, y: null};
+                let graphWidth = graph.getBoundingClientRect().width;
+                graph.height = graphHeight + 2;
+                graph.width = graphWidth;
+                let graphStep = graphWidth / (graphData.length - 1);
                 let isAllPerfect = true;
+                let ctx = graph.getContext("2d");
+                // Draw background horizontal lines
+                ctx.beginPath();
+                if(window.getComputedStyle(document.documentElement).getPropertyValue('--color-text-mid') == "") ctx.strokeStyle = "#aaa";
+                else ctx.strokeStyle = window.getComputedStyle(document.documentElement).getPropertyValue('--color-dashboard-panel-content-background');
+                ctx.lineWidth = 1;
+                for (let i = 0; i < 4; i++) {
+                    let y = Math.round(graphHeight / 3 * i) + 0.5;
+                    ctx.moveTo(0, y);
+                    ctx.lineTo(graphWidth, y);
+                }
+                ctx.stroke();
+                // Draw graph
+                ctx.beginPath();
+                ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--color-text');
+                ctx.lineWidth = 2;
                 for (let i = 0; i < graphData.length; i++) {
                     let x = graphStep * i;
-                    let y = graphHeight - (graphData[i] * graphHeight);
+                    let y = graphHeight - (graphData[i] * graphHeight) + 1;
                     if(graphData[i] != 1) isAllPerfect = false;
-                    if(prevPos.x != null) {
-                        let line = document.createElement("div");
-                        line.classList = "accuracy-graph__line";
-                        let lineWidth = Math.sqrt(Math.pow(x - prevPos.x, 2) + Math.pow(y - prevPos.y, 2));
-                        line.style.width = lineWidth + "px";
-                        let rotation = Math.atan2(y - prevPos.y, x - prevPos.x);
-                        line.style.transform = "rotate(" + rotation + "rad)";
-                        if(rotation != 0) line.style.marginRight = Math.cos(rotation) * lineWidth - lineWidth + "px";
-                        line.style.top = prevPos.y + "px";
-                        graphDiv.appendChild(line);
-                    }
-                    prevPos = {x: x, y: y};
-                    // console.log(x + ", " + y);
-                    // if(i == 0) ctx.moveTo(x, y);
-                    // else ctx.lineTo(x, y);
+                    // Draw line
+                    if(i == 0) ctx.moveTo(x, y);
+                    else ctx.lineTo(x, y);
                 }
+                // Show congratulation message if all perfect
                 if(isAllPerfect) {
                     let congratulationMessage = document.createElement("span");
                     congratulationMessage.textContent = "🎊 Perfect session! 🎊";
                     graphDiv.appendChild(congratulationMessage);
                 }
-                // ctx.stroke();
+                ctx.stroke();
             }
 
             // Reset the statistics variables
@@ -370,9 +377,14 @@
         }
         // Check if the answer was correct or not by looking for the correct attribute
         let correct = document.querySelector(".quiz-input__input-container[correct='true']") !== null;
-
-        // Push value to correct history array: 1 if correct, 0 if incorrect
         correctHistory.push(correct);
+
+        // Record the answer entered if incorrect
+        if (!correct) {
+            if(!incorrectEntered.has(e.detail.subjectWithStats.subject.id)) incorrectEntered.set(e.detail.subjectWithStats.subject.id, [[], []]);
+            if(currentQuestionType === "meaning") incorrectEntered.get(e.detail.subjectWithStats.subject.id)[0].push(e.detail.answer);
+            else if(currentQuestionType === "reading") incorrectEntered.get(e.detail.subjectWithStats.subject.id)[1].push(e.detail.answer);
+        }
 
         // Increment the questions answered and correct/incorrect counters
         questionsAnswered++;
@@ -413,7 +425,7 @@
         console.log(subject.characters + " - Old SRS Level: " + SRSLevelNames[currentSRSLevel] + " New SRS Level: " + SRSLevelNames[newSRSLevel]);
 
         // Push the subject data to the items list array
-        let subjectInfoToSave = { characters: subject.characters, type: subject.type, id: subject.id, SRSUp: didSRSUp, meanings: subject.meanings, readings: reading, oldSRS: currentSRSLevel, newSRS: newSRSLevel, isWarning: isWarning };
+        let subjectInfoToSave = { characters: subject.characters, type: subject.type, id: subject.id, SRSUp: didSRSUp, meanings: subject.meanings, readings: reading, oldSRS: currentSRSLevel, newSRS: newSRSLevel, isWarning: isWarning, incorrectEntered: incorrectEntered.get(subject.id) };
         itemsList.push(subjectInfoToSave);
     });
 
