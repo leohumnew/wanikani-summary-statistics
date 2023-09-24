@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name Wanikani Review Summary
 // @namespace https://tampermonkey.net/
-// @version 0.4.2
+// @version 0.5.0
 // @license MIT
 // @description Show a popup with statistics about the review session when returning to the dashboard
 // @author leohumnew
@@ -27,7 +27,9 @@
     let currentWord = "";
     let currentSRSLevel = -1;
     let quizQueueSRS = [];
+    // Other Variables
     let SRSLevelNames = ["Lesson", "Appr. I", "Appr. II", "Appr. III", "Appr. IV", "Guru I", "Guru II", "Master", "Enl.", "Burned", "Error"];
+    const GRAPH_HEIGHT = 100;
 
     // Create style element with popup styles and append it to the document head
     let style = document.createElement("style");
@@ -35,7 +37,7 @@
     style.textContent += ".summary-popup > a { background-color: transparent; text-decoration: none; text-align: center; margin: 30px 50px; position: absolute; top: 0px; right: 0px; cursor: pointer; padding: 10px; border-radius: 5px; outline: 1px solid var(--color-tertiary, black); color: var(--color-text) } .summary-popup > a:hover { color: var(--color-tertiary, #bbb); }";
     style.textContent += ".summary-popup table { border-collapse: collapse; border-radius: 5px; width: 100%; background-color: var(--color-dashboard-panel-background, #000); } .summary-popup td { border: none; padding: 5px; text-align: center; }";
     style.textContent += ".summary-popup h1 { margin-bottom: 10px; font-weight: bold; font-size: var(--font-size-xlarge); } .summary-popup h2 { font-weight: bold; margin-top: 20px; padding: 20px; color: #fff; font-size: var(--font-size-large); border-radius: 5px 5px 0 0; }";
-    style.textContent += ".summary-popup ul { background-color: var(--color-dashboard-panel-background, #fff); padding: 5px; border-radius: 0 0 5px 5px; } .summary-popup li { display: inline-block; } .summary-popup li a { display: block; margin: 10px 5px; padding: 10px; color: var(--color-text-dark, #fff); font-size: 1.5rem; height: 2.6rem; border-radius: 5px; text-decoration: none; position: relative; } .summary-popup li a img { height: 1.5rem; vertical-align: middle; }";
+    style.textContent += ".summary-popup ul { background-color: var(--color-dashboard-panel-background, #fff); padding: 5px; border-radius: 0 0 5px 5px; } .summary-popup li { display: inline-block; } .summary-popup li a { display: block; margin: 10px 5px; padding: 10px; color: var(--color-text-dark, #fff); font-size: 1.5rem; height: 2.6rem; border-radius: 5px; text-decoration: none; position: relative; } .summary-popup li a img { height: 1em; vertical-align: middle; }";
     style.textContent += ".summary-popup .summary-popup__popup { background-color: var(--color-menu, #ddd); color: var(--color-text, #fff); text-decoration: none; padding: 10px; border-radius: 5px; position: fixed; z-index: 9999; display: none; font-size: var(--font-size-medium); box-shadow: 0 2px 3px rgba(0, 0, 0, 0.5); width: max-content; line-height: 1.3; }";
     style.textContent += ".summary-popup .summary-popup__popup:after { content: ''; position: absolute; top: -8px; margin-left: -10px; width: 0; height: 0; border-left: 10px solid transparent; border-right: 10px solid transparent; border-bottom: 10px solid var(--color-menu, #ddd); }";
     style.textContent += ".summary-popup .summary-popup__popup--left:after { right: 15px; } .summary-popup .summary-popup__popup--right:after { left: 25px; }";
@@ -125,6 +127,57 @@
 
         // Return the table element
         return table;
+    }
+
+    // Function to create summary section
+    function createSummarySectionTitle(title, icon, bgColor) {
+        let sectionTitle = document.createElement("h2");
+        let sectionTitleIcon = document.createElement("span");
+        sectionTitleIcon.classList = "wk-icon fa-solid " + icon;
+        sectionTitle.appendChild(sectionTitleIcon);
+        sectionTitle.innerHTML += " " + title;
+        sectionTitle.style.backgroundColor = bgColor;
+        return sectionTitle;
+    }
+
+    // Function to create graph
+    function createGraph(data, canvas, congratulationMessageText) {
+        let graphWidth = canvas.getBoundingClientRect().width;
+        canvas.height = GRAPH_HEIGHT + 2;
+        canvas.width = graphWidth;
+        let graphStep = graphWidth / (data.length - 1);
+        let isAllPerfect = true;
+        let ctx = canvas.getContext("2d");
+        // Draw background horizontal lines
+        ctx.beginPath();
+        if(window.getComputedStyle(document.documentElement).getPropertyValue('--color-text-mid') == "") ctx.strokeStyle = "#aaa";
+        else ctx.strokeStyle = window.getComputedStyle(document.documentElement).getPropertyValue('--color-dashboard-panel-content-background');
+        ctx.lineWidth = 1;
+        for (let i = 0; i < 4; i++) {
+            let y = Math.round(GRAPH_HEIGHT / 3 * i) + 0.5;
+            ctx.moveTo(0, y);
+            ctx.lineTo(graphWidth, y);
+        }
+        ctx.stroke();
+        // Draw graph
+        ctx.beginPath();
+        ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--color-text');
+        ctx.lineWidth = 2;
+        for (let i = 0; i < data.length; i++) {
+            let x = graphStep * i;
+            let y = GRAPH_HEIGHT - (data[i] * GRAPH_HEIGHT) + 1;
+            if(data[i] != 1) isAllPerfect = false;
+            // Draw line
+            if(i == 0) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
+        }
+        // Show congratulation message if all perfect
+        if(isAllPerfect) {
+            let congratulationMessage = document.createElement("span");
+            congratulationMessage.textContent = congratulationMessageText;
+            canvas.parentNode.appendChild(congratulationMessage);
+        }
+        ctx.stroke();
     }
 
     // Function to show the statistics when returning to the dashboard
@@ -264,98 +317,63 @@
             let table = createTable(data);
 
             // Create h2 titles for the lists
-            let correctTitle = document.createElement("h2");
-            let correctTitleIcon = document.createElement("span");
-            correctTitleIcon.classList = "wk-icon fa-solid fa-circle-up";
-            correctTitle.appendChild(correctTitleIcon);
-            correctTitle.innerHTML += " " + srsUpNum + " Items SRS Up";
-            correctTitle.style.backgroundColor = "var(--color-quiz-correct-background, #88cc00)";
-
-            let incorrectTitle = document.createElement("h2");
-            let incorrectTitleIcon = document.createElement("span");
-            incorrectTitleIcon.classList = "wk-icon fa-solid fa-circle-down";
-            incorrectTitle.appendChild(incorrectTitleIcon);
-            incorrectTitle.innerHTML += " " + (itemsList.length - srsUpNum) + " Items SRS Down";
-            incorrectTitle.style.backgroundColor = "var(--color-quiz-incorrect-background, #ff0033)";
-
-            // Create a div element to wrap everything
-            let content = document.createElement("div");
-            content.append(heading, table, incorrectTitle, listIncorrect, correctTitle, listCorrect);
+            let correctTitle = createSummarySectionTitle(srsUpNum + " Items SRS Up", "fa-circle-up", "var(--color-quiz-correct-background, #88cc00)");
+            let incorrectTitle = createSummarySectionTitle((itemsList.length - srsUpNum) + " Items SRS Down", "fa-circle-down", "var(--color-quiz-incorrect-background, #ff0033)");
 
             // Create a graph showing accuracy throughout the session using the correctHistory array, with an average of 3 elements
+            let graphTitle, graphDiv;
             if(itemsList.length > 4) {
-                // Title h2
-                let graphTitle = document.createElement("h2");
-                let graphTitleIcon = document.createElement("span");
-                graphTitleIcon.classList = "wk-icon fa-solid fa-chart-simple";
-                graphTitle.appendChild(graphTitleIcon);
-                graphTitle.innerHTML += " Session Accuracy";
-                graphTitle.style.backgroundColor = "var(--color-menu, #777)";
+                graphTitle = createSummarySectionTitle(" Session Accuracy", "fa-chart-simple", "var(--color-menu, #777)");
                 // Graph
-                let graphDiv = document.createElement("div");
+                graphDiv = document.createElement("div");
                 graphDiv.classList = "accuracy-graph";
                 let graph = document.createElement("canvas");
                 graph.style.width = "100%";
                 graph.style.height = "100%";
                 graphDiv.appendChild(graph);
-
-                // Wrapper
-                let graphWrapper = document.createElement("div");
-                graphWrapper.append(graphTitle, graphDiv);
-                content.appendChild(graphWrapper);
             }
 
-            // Create a popup element with the content
+            // Get existing accuracy history array from local storage or create new one, then append the current accuracy to it and store it again
+            let accuracyArray = JSON.parse(localStorage.getItem("WKSummaryAccuracyHistory")) || [];
+            accuracyArray.push(Math.round(srsUpNum / itemsList.length * 100) / 100);
+            if(accuracyArray.length > 10) accuracyArray.shift(); // If the array is longer than 10 elements, remove the first one
+            localStorage.setItem("WKSummaryAccuracyHistory", JSON.stringify(accuracyArray));
+
+            // Create a graph showing accuracy throughout the last 10 (or less) sessions
+            let graphTitle2, graphDiv2;
+            if(accuracyArray.length > 3) {
+                graphTitle2 = createSummarySectionTitle(" Accuracy History", "fa-clock-rotate-left", "var(--color-menu, #777)");
+                // Graph
+                graphDiv2 = document.createElement("div");
+                graphDiv2.classList = "accuracy-graph";
+                let graph = document.createElement("canvas");
+                graph.style.width = "100%";
+                graph.style.height = "100%";
+                graphDiv2.appendChild(graph);
+            }
+
+            // Create a div element to wrap everything
+            let content = document.createElement("div");
+            content.append(heading, table, incorrectTitle, listIncorrect, correctTitle, listCorrect, graphTitle ? graphTitle : "", graphDiv ? graphDiv : "", graphTitle2 ? graphTitle2 : "", graphDiv2 ? graphDiv2 : "");
+            // Create a popup element with all the summary content
             let popup = createPopup(content);
             document.body.appendChild(popup);
 
-            // Fill the graph with the correctHistory array
-            if(itemsList.length > 4) {
-                let graphDiv = document.querySelector(".accuracy-graph");
-                let graph = document.querySelector(".accuracy-graph canvas");
+            // If it exists, fill the graph with the correctHistory array
+            if(graphDiv) {
+                let graph = graphDiv.querySelector("canvas");
                 // Calculate graph data
                 let graphData = [];
                 for (let i = 1; i < correctHistory.length - 1; i++) {
                     graphData.push((correctHistory[i-1] + correctHistory[i] + correctHistory[i+1]) / 3);
                 }
-                let graphHeight = 100;
-                let graphWidth = graph.getBoundingClientRect().width;
-                graph.height = graphHeight + 2;
-                graph.width = graphWidth;
-                let graphStep = graphWidth / (graphData.length - 1);
-                let isAllPerfect = true;
-                let ctx = graph.getContext("2d");
-                // Draw background horizontal lines
-                ctx.beginPath();
-                if(window.getComputedStyle(document.documentElement).getPropertyValue('--color-text-mid') == "") ctx.strokeStyle = "#aaa";
-                else ctx.strokeStyle = window.getComputedStyle(document.documentElement).getPropertyValue('--color-dashboard-panel-content-background');
-                ctx.lineWidth = 1;
-                for (let i = 0; i < 4; i++) {
-                    let y = Math.round(graphHeight / 3 * i) + 0.5;
-                    ctx.moveTo(0, y);
-                    ctx.lineTo(graphWidth, y);
-                }
-                ctx.stroke();
-                // Draw graph
-                ctx.beginPath();
-                ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--color-text');
-                ctx.lineWidth = 2;
-                for (let i = 0; i < graphData.length; i++) {
-                    let x = graphStep * i;
-                    let y = graphHeight - (graphData[i] * graphHeight) + 1;
-                    if(graphData[i] != 1) isAllPerfect = false;
-                    // Draw line
-                    if(i == 0) ctx.moveTo(x, y);
-                    else ctx.lineTo(x, y);
-                }
-                // Show congratulation message if all perfect
-                if(isAllPerfect) {
-                    let congratulationMessage = document.createElement("span");
-                    congratulationMessage.textContent = "🎊 Perfect session! 🎊";
-                    graphDiv.appendChild(congratulationMessage);
-                }
-                ctx.stroke();
+                createGraph(graphData, graph, "🎊 Perfect session! 🎊");
             }
+            // If it exists, fill the second graph with the accuracyArray array
+            if(graphDiv2) {
+                let graph = graphDiv2.querySelector("canvas");
+                createGraph(accuracyArray, graph, "🎊 Perfect history! 🎊");
+            }                
 
             // Reset the statistics variables
             questionsAnswered = 0;
