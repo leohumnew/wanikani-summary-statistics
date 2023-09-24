@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name Wanikani Review Summary
 // @namespace https://tampermonkey.net/
-// @version 0.4.0
+// @version 0.4.2
 // @license MIT
 // @description Show a popup with statistics about the review session when returning to the dashboard
 // @author leohumnew
@@ -42,7 +42,7 @@
     style.textContent += ".summary-popup .accuracy-graph { position: relative; height: 152px; width: 100%; background-color: var(--color-dashboard-panel-background, #fff); padding: 25px 2.5%; border-radius: 0 0 5px 5px; }";
     style.textContent += ".summary-popup .accuracy-graph span { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: var(--font-size-xlarge); color: var(--color-text); }";
     style.textContent += ".summary-popup ul .wk-icon { position: absolute; top: -8px; right: -8px; font-size: var(--font-size-xsmall); width: 1.5em; text-align: center; color: white; background-color: var(--color-burned); padding: 3px; border-radius: 50%; border: white solid 1px; }";
-    style.textContent += ".summary-popup ul .incorrect-text { color: var(--color-incorrect, #cc4343); font-size: var(--font-size-small); vertical-align: top; }";
+    style.textContent += ".summary-popup ul .incorrect-text { color: var(--color-incorrect, #cc4343); filter: brightness(2); font-size: var(--font-size-small); vertical-align: top; }";
 
     document.head.appendChild(style);
 
@@ -418,7 +418,7 @@
             }
         }
 
-        let isWarning = e.detail.subjectWithStats.stats.meaning.incorrect + e.detail.subjectWithStats.stats.reading.incorrect > 2;
+        let isWarning = e.detail.subjectWithStats.stats.meaning.incorrect + e.detail.subjectWithStats.stats.reading.incorrect > 2 || (e.detail.subjectWithStats.stats.meaning.incorrect > 0 && e.detail.subjectWithStats.stats.reading.incorrect > 0);
 
         // Calculate the new SRS level
         let newSRSLevel = didSRSUp ? currentSRSLevel + 1 : (currentSRSLevel < 2 ? currentSRSLevel : (currentSRSLevel < 5 ? currentSRSLevel - 1 : currentSRSLevel - 2));
@@ -456,8 +456,15 @@
     homeButton.addEventListener("click", function(e) {
         // Prevent the default behavior of the button
         if(questionsAnswered > 0) e.preventDefault();
-
         showStatistics();
+    });
+
+    // If statistics screen is open, set the right arrow key and the escape key to go back to the dashboard
+    document.addEventListener("keydown", function(e) {
+        if (document.querySelector(".summary-popup") !== null && (e.key === "ArrowRight" || e.key === "Escape")) {
+            e.preventDefault();
+            window.location.href = "https://www.wanikani.com/dashboard";
+        }
     });
 
 })();
