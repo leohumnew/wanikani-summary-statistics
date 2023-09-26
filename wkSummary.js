@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name Wanikani Review Summary
 // @namespace https://tampermonkey.net/
-// @version 0.5.0
+// @version 0.5.1
 // @license MIT
 // @description Show a popup with statistics about the review session when returning to the dashboard
 // @author leohumnew
@@ -29,7 +29,7 @@
     let quizQueueSRS = [];
     // Other Variables
     let SRSLevelNames = ["Lesson", "Appr. I", "Appr. II", "Appr. III", "Appr. IV", "Guru I", "Guru II", "Master", "Enl.", "Burned", "Error"];
-    const GRAPH_HEIGHT = 100;
+    const GRAPH_HEIGHT = 120;
 
     // Create style element with popup styles and append it to the document head
     let style = document.createElement("style");
@@ -41,10 +41,11 @@
     style.textContent += ".summary-popup .summary-popup__popup { background-color: var(--color-menu, #ddd); color: var(--color-text, #fff); text-decoration: none; padding: 10px; border-radius: 5px; position: fixed; z-index: 9999; display: none; font-size: var(--font-size-medium); box-shadow: 0 2px 3px rgba(0, 0, 0, 0.5); width: max-content; line-height: 1.3; }";
     style.textContent += ".summary-popup .summary-popup__popup:after { content: ''; position: absolute; top: -8px; margin-left: -10px; width: 0; height: 0; border-left: 10px solid transparent; border-right: 10px solid transparent; border-bottom: 10px solid var(--color-menu, #ddd); }";
     style.textContent += ".summary-popup .summary-popup__popup--left:after { right: 15px; } .summary-popup .summary-popup__popup--right:after { left: 25px; }";
-    style.textContent += ".summary-popup .accuracy-graph { position: relative; height: 152px; width: 100%; background-color: var(--color-dashboard-panel-background, #fff); padding: 25px 2.5%; border-radius: 0 0 5px 5px; }";
+    style.textContent += ".summary-popup .accuracy-graph { position: relative; height: " + (GRAPH_HEIGHT + 42) + "px; width: 100%; background-color: var(--color-dashboard-panel-background, #fff); padding: 25px 1% 15px 1%; border-radius: 0 0 5px 5px; }";
     style.textContent += ".summary-popup .accuracy-graph span { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: var(--font-size-xlarge); color: var(--color-text); }";
     style.textContent += ".summary-popup ul .wk-icon { position: absolute; top: -8px; right: -8px; font-size: var(--font-size-xsmall); width: 1.5em; text-align: center; color: white; background-color: var(--color-burned); padding: 3px; border-radius: 50%; border: white solid 1px; }";
-    style.textContent += ".summary-popup ul .incorrect-text { color: var(--color-incorrect, #cc4343); filter: brightness(2); font-size: var(--font-size-small); vertical-align: top; }";
+    style.textContent += ".summary-popup ul .incorrect-text { color: var(--color-incorrect, #cc4343); font-size: var(--font-size-small); vertical-align: top; }";
+    if(window.matchMedia('(prefers-color-scheme: dark)').matches) style.textContent += ".summary-popup ul .incorrect-text { filter: brightness(2) }";
 
     document.head.appendChild(style);
 
@@ -142,10 +143,14 @@
 
     // Function to create graph
     function createGraph(data, canvas, congratulationMessageText) {
+        createGraph(data, canvas, congratulationMessageText, null) }
+    function createGraph(data, canvas, congratulationMessageText, labels) {
         let graphWidth = canvas.getBoundingClientRect().width;
         canvas.height = GRAPH_HEIGHT + 2;
         canvas.width = graphWidth;
-        let graphStep = graphWidth / (data.length - 1);
+        let sidesOffset = window.getComputedStyle(document.documentElement).getPropertyValue('--font-size-small').replace("px", ""); // Offset to apply to sides so that label text will fit - is applied to sides and bottom
+        let bottomOffset = sidesOffset * 1.3;
+        let graphStep = (graphWidth - sidesOffset * 2) / (data.length - 1);
         let isAllPerfect = true;
         let ctx = canvas.getContext("2d");
         // Draw background horizontal lines
@@ -154,7 +159,7 @@
         else ctx.strokeStyle = window.getComputedStyle(document.documentElement).getPropertyValue('--color-dashboard-panel-content-background');
         ctx.lineWidth = 1;
         for (let i = 0; i < 4; i++) {
-            let y = Math.round(GRAPH_HEIGHT / 3 * i) + 0.5;
+            let y = Math.round((GRAPH_HEIGHT - bottomOffset) / 3 * i) + 0.5;
             ctx.moveTo(0, y);
             ctx.lineTo(graphWidth, y);
         }
@@ -164,12 +169,28 @@
         ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--color-text');
         ctx.lineWidth = 2;
         for (let i = 0; i < data.length; i++) {
-            let x = graphStep * i;
-            let y = GRAPH_HEIGHT - (data[i] * GRAPH_HEIGHT) + 1;
+            let x = graphStep * i + sidesOffset;
+            let y = (GRAPH_HEIGHT - bottomOffset) * (1 - data[i]) + 1;
             if(data[i] != 1) isAllPerfect = false;
             // Draw line
             if(i == 0) ctx.moveTo(x, y);
             else ctx.lineTo(x, y);
+        }
+        ctx.stroke();
+        if(labels != null) {
+            let lastLabel = "";
+            ctx.fillStyle = window.getComputedStyle(document.documentElement).getPropertyValue('--color-text');
+            ctx.font = window.getComputedStyle(document.documentElement).getPropertyValue('--font-size-small') + " sans-serif";
+            ctx.textAlign = "center";
+            for (let i = 0; i < data.length; i++) {
+                if(labels[i] != lastLabel) {
+                    let x = graphStep * i + sidesOffset;
+                    let y = GRAPH_HEIGHT;
+                    console.log(labels[i], x, y);
+                    ctx.fillText(labels[i], x, y);
+                    lastLabel = labels[i];
+                }
+            }
         }
         // Show congratulation message if all perfect
         if(isAllPerfect) {
@@ -177,14 +198,13 @@
             congratulationMessage.textContent = congratulationMessageText;
             canvas.parentNode.appendChild(congratulationMessage);
         }
-        ctx.stroke();
     }
 
     // Function to show the statistics when returning to the dashboard
     function showStatistics() {
         console.log(itemsList);
         // Check if there are any items reviewed
-        if (questionsAnswered > 0) {
+        if (itemsList.length > 0) {
             // Create a heading element with some text and styles
             let headingText = document.createElement("h1");
             let headingImage = document.createElement("span");
@@ -335,8 +355,9 @@
 
             // Get existing accuracy history array from local storage or create new one, then append the current accuracy to it and store it again
             let accuracyArray = JSON.parse(localStorage.getItem("WKSummaryAccuracyHistory")) || [];
-            accuracyArray.push(Math.round(srsUpNum / itemsList.length * 100) / 100);
-            if(accuracyArray.length > 10) accuracyArray.shift(); // If the array is longer than 10 elements, remove the first one
+            if(accuracyArray != [] && !Array.isArray(accuracyArray[0])) accuracyArray = [];
+            accuracyArray.push([Math.round(srsUpNum / itemsList.length * 100) / 100, new Date().toLocaleString("en-US", {weekday: "short"})]);
+            if(accuracyArray.length > 15) accuracyArray.shift(); // If the array is longer than 10 elements, remove the first one
             localStorage.setItem("WKSummaryAccuracyHistory", JSON.stringify(accuracyArray));
 
             // Create a graph showing accuracy throughout the last 10 (or less) sessions
@@ -372,7 +393,7 @@
             // If it exists, fill the second graph with the accuracyArray array
             if(graphDiv2) {
                 let graph = graphDiv2.querySelector("canvas");
-                createGraph(accuracyArray, graph, "🎊 Perfect history! 🎊");
+                createGraph(accuracyArray.map(tuple => tuple[0]), graph, "🎊 Perfect history! 🎊", accuracyArray.map(tuple => tuple[1]));
             }                
 
             // Reset the statistics variables
