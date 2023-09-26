@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name Wanikani Review Summary
 // @namespace https://tampermonkey.net/
-// @version 0.5.1
+// @version 0.5.2
 // @license MIT
 // @description Show a popup with statistics about the review session when returning to the dashboard
 // @author leohumnew
@@ -143,14 +143,15 @@
 
     // Function to create graph
     function createGraph(data, canvas, congratulationMessageText) {
-        createGraph(data, canvas, congratulationMessageText, null) }
+        createGraph(data, canvas, congratulationMessageText, null);
+    }
     function createGraph(data, canvas, congratulationMessageText, labels) {
         let graphWidth = canvas.getBoundingClientRect().width;
         canvas.height = GRAPH_HEIGHT + 2;
         canvas.width = graphWidth;
-        let sidesOffset = window.getComputedStyle(document.documentElement).getPropertyValue('--font-size-small').replace("px", ""); // Offset to apply to sides so that label text will fit - is applied to sides and bottom
+        let sidesOffset = parseFloat(window.getComputedStyle(document.documentElement).getPropertyValue('--font-size-small')); // Offset to apply to sides so that label text will fit - is applied to sides and bottom
         let bottomOffset = sidesOffset * 1.3;
-        let graphStep = (graphWidth - sidesOffset * 2) / (data.length - 1);
+        let graphStep = (graphWidth - (sidesOffset * 2)) / (data.length - 1);
         let isAllPerfect = true;
         let ctx = canvas.getContext("2d");
         // Draw background horizontal lines
@@ -179,6 +180,7 @@
         ctx.stroke();
         if(labels != null) {
             let lastLabel = "";
+            let isDays = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].includes(labels[0]);
             ctx.fillStyle = window.getComputedStyle(document.documentElement).getPropertyValue('--color-text');
             ctx.font = window.getComputedStyle(document.documentElement).getPropertyValue('--font-size-small') + " sans-serif";
             ctx.textAlign = "center";
@@ -186,9 +188,12 @@
                 if(labels[i] != lastLabel) {
                     let x = graphStep * i + sidesOffset;
                     let y = GRAPH_HEIGHT;
-                    console.log(labels[i], x, y);
                     ctx.fillText(labels[i], x, y);
                     lastLabel = labels[i];
+                } else if(isDays && i == data.length - 1) {
+                    let x = graphStep * i + sidesOffset;
+                    let y = GRAPH_HEIGHT;
+                    ctx.fillText("Now", x, y);
                 }
             }
         }
