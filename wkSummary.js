@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name Wanikani Review Summary
 // @namespace https://tampermonkey.net/
-// @version 0.5.2
+// @version 0.5.3
 // @license MIT
 // @description Show a popup with statistics about the review session when returning to the dashboard
 // @author leohumnew
@@ -410,6 +410,8 @@
             readingCorrect = 0;
             readingIncorrect = 0;
             itemsList = [];
+        } else {
+            window.location.href = "https://www.wanikani.com/dashboard";
         }
     }
 
