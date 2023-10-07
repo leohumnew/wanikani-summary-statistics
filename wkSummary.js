@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name Wanikani Review Summary
 // @namespace https://tampermonkey.net/
-// @version 0.5.3
+// @version 0.5.4
 // @license MIT
 // @description Show a popup with statistics about the review session when returning to the dashboard
 // @author leohumnew
@@ -178,6 +178,7 @@
             else ctx.lineTo(x, y);
         }
         ctx.stroke();
+        // Draw labels
         if(labels != null) {
             let lastLabel = "";
             let isDays = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].includes(labels[0]);
@@ -187,12 +188,12 @@
             for (let i = 0; i < data.length; i++) {
                 if(labels[i] != lastLabel) {
                     let x = graphStep * i + sidesOffset;
-                    let y = GRAPH_HEIGHT;
+                    let y = GRAPH_HEIGHT - 1;
                     ctx.fillText(labels[i], x, y);
                     lastLabel = labels[i];
                 } else if(isDays && i == data.length - 1) {
                     let x = graphStep * i + sidesOffset;
-                    let y = GRAPH_HEIGHT;
+                    let y = GRAPH_HEIGHT - 1;
                     ctx.fillText("Now", x, y);
                 }
             }
@@ -247,6 +248,9 @@
                     listItemLink.style.backgroundColor = "var(--color-vocabulary, #aa00ff)";
                     listItemLink.href = "https://www.wanikani.com/vocabulary/" + itemsList[i].characters;
                 }
+
+                // Make link open in new tab
+                listItemLink.target = "_blank";
 
                 // Badge if burned or if warning
                 if(itemsList[i].newSRS == 9) {
@@ -492,17 +496,23 @@
 
     // Add an event listener for the turbo before-visit event
     window.addEventListener("turbo:before-visit", function(e) {
-        e.preventDefault();
-        showStatistics();
+        // Show stats if .summary-popup is not already visible and there are items reviewed
+        if (document.querySelector(".summary-popup") === null && questionsAnswered > 0) {
+            e.preventDefault();
+            showStatistics();
+        }
+
     });
 
     // Home button override
     let homeButton = document.querySelector(".summary-button");
     homeButton.setAttribute("title", "Show statistics and return to dashboard");
     homeButton.addEventListener("click", function(e) {
-        // Prevent the default behavior of the button
-        if(questionsAnswered > 0) e.preventDefault();
-        showStatistics();
+        // Show stats if .summary-popup is not already visible and there are items reviewed
+        if (document.querySelector(".summary-popup") === null && questionsAnswered > 0) {
+            e.preventDefault();
+            showStatistics();
+        }
     });
 
     // If statistics screen is open, set the right arrow key and the escape key to go back to the dashboard
