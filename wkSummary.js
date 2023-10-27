@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name Wanikani Review Summary
 // @namespace https://tampermonkey.net/
-// @version 0.5.4
+// @version 0.5.5
 // @license MIT
 // @description Show a popup with statistics about the review session when returning to the dashboard
 // @author leohumnew
@@ -33,15 +33,15 @@
 
     // Create style element with popup styles and append it to the document head
     let style = document.createElement("style");
-    style.textContent = ".summary-popup { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 9999; color: var(--color-text); background-color: var(--color-dashboard-panel-content-background, #eee); padding: 50px; overflow-y: auto; font-size: var(--font-size-large); }";
+    style.textContent = ".summary-popup { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 9999; color: var(--color-text); background-color: var(--color-wk-panel-content-background, #eee); padding: 50px; overflow-y: auto; font-size: var(--font-size-large); }";
     style.textContent += ".summary-popup > a { background-color: transparent; text-decoration: none; text-align: center; margin: 30px 50px; position: absolute; top: 0px; right: 0px; cursor: pointer; padding: 10px; border-radius: 5px; outline: 1px solid var(--color-tertiary, black); color: var(--color-text) } .summary-popup > a:hover { color: var(--color-tertiary, #bbb); }";
-    style.textContent += ".summary-popup table { border-collapse: collapse; border-radius: 5px; width: 100%; background-color: var(--color-dashboard-panel-background, #000); } .summary-popup td { border: none; padding: 5px; text-align: center; }";
+    style.textContent += ".summary-popup table { border-collapse: collapse; border-radius: 5px; width: 100%; background-color: var(--color-wk-panel-background, #000); } .summary-popup td { border: none; padding: 5px; text-align: center; }";
     style.textContent += ".summary-popup h1 { margin-bottom: 10px; font-weight: bold; font-size: var(--font-size-xlarge); } .summary-popup h2 { font-weight: bold; margin-top: 20px; padding: 20px; color: #fff; font-size: var(--font-size-large); border-radius: 5px 5px 0 0; }";
-    style.textContent += ".summary-popup ul { background-color: var(--color-dashboard-panel-background, #fff); padding: 5px; border-radius: 0 0 5px 5px; } .summary-popup li { display: inline-block; } .summary-popup li a { display: block; margin: 10px 5px; padding: 10px; color: var(--color-text-dark, #fff); font-size: 1.5rem; height: 2.6rem; border-radius: 5px; text-decoration: none; position: relative; } .summary-popup li a img { height: 1em; vertical-align: middle; }";
+    style.textContent += ".summary-popup ul { background-color: var(--color-wk-panel-background, #fff); padding: 5px; border-radius: 0 0 5px 5px; } .summary-popup li { display: inline-block; } .summary-popup li a { display: block; margin: 10px 5px; padding: 10px; color: var(--color-text-dark, #fff); font-size: 1.5rem; height: 2.6rem; border-radius: 5px; text-decoration: none; position: relative; } .summary-popup li a img { height: 1em; vertical-align: middle; }";
     style.textContent += ".summary-popup .summary-popup__popup { background-color: var(--color-menu, #ddd); color: var(--color-text, #fff); text-decoration: none; padding: 10px; border-radius: 5px; position: fixed; z-index: 9999; display: none; font-size: var(--font-size-medium); box-shadow: 0 2px 3px rgba(0, 0, 0, 0.5); width: max-content; line-height: 1.3; }";
     style.textContent += ".summary-popup .summary-popup__popup:after { content: ''; position: absolute; top: -8px; margin-left: -10px; width: 0; height: 0; border-left: 10px solid transparent; border-right: 10px solid transparent; border-bottom: 10px solid var(--color-menu, #ddd); }";
     style.textContent += ".summary-popup .summary-popup__popup--left:after { right: 15px; } .summary-popup .summary-popup__popup--right:after { left: 25px; }";
-    style.textContent += ".summary-popup .accuracy-graph { position: relative; height: " + (GRAPH_HEIGHT + 42) + "px; width: 100%; background-color: var(--color-dashboard-panel-background, #fff); padding: 25px 1% 15px 1%; border-radius: 0 0 5px 5px; }";
+    style.textContent += ".summary-popup .accuracy-graph { position: relative; height: " + (GRAPH_HEIGHT + 42) + "px; width: 100%; background-color: var(--color-wk-panel-background, #fff); padding: 25px 1% 15px 1%; border-radius: 0 0 5px 5px; }";
     style.textContent += ".summary-popup .accuracy-graph span { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: var(--font-size-xlarge); color: var(--color-text); }";
     style.textContent += ".summary-popup ul .wk-icon { position: absolute; top: -8px; right: -8px; font-size: var(--font-size-xsmall); width: 1.5em; text-align: center; color: white; background-color: var(--color-burned); padding: 3px; border-radius: 50%; border: white solid 1px; }";
     style.textContent += ".summary-popup ul .incorrect-text { color: var(--color-incorrect, #cc4343); font-size: var(--font-size-small); vertical-align: top; }";
@@ -157,7 +157,7 @@
         // Draw background horizontal lines
         ctx.beginPath();
         if(window.getComputedStyle(document.documentElement).getPropertyValue('--color-text-mid') == "") ctx.strokeStyle = "#aaa";
-        else ctx.strokeStyle = window.getComputedStyle(document.documentElement).getPropertyValue('--color-dashboard-panel-content-background');
+        else ctx.strokeStyle = window.getComputedStyle(document.documentElement).getPropertyValue('--color-wk-panel-content-background');
         ctx.lineWidth = 1;
         for (let i = 0; i < 4; i++) {
             let y = Math.round((GRAPH_HEIGHT - bottomOffset) / 3 * i) + 0.5;
