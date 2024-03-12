@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name Wanikani Review Summary
 // @namespace https://tampermonkey.net/
-// @version 0.5.5
+// @version 0.5.6
 // @license MIT
 // @description Show a popup with statistics about the review session when returning to the dashboard
 // @author leohumnew
@@ -34,6 +34,7 @@
     // Create style element with popup styles and append it to the document head
     let style = document.createElement("style");
     style.textContent = ".summary-popup { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 9999; color: var(--color-text); background-color: var(--color-wk-panel-content-background, #eee); padding: 50px; overflow-y: auto; font-size: var(--font-size-large); }";
+    style.textContent += ".summary-popup .wk-icon { vertical-align: bottom; }";
     style.textContent += ".summary-popup > a { background-color: transparent; text-decoration: none; text-align: center; margin: 30px 50px; position: absolute; top: 0px; right: 0px; cursor: pointer; padding: 10px; border-radius: 5px; outline: 1px solid var(--color-tertiary, black); color: var(--color-text) } .summary-popup > a:hover { color: var(--color-tertiary, #bbb); }";
     style.textContent += ".summary-popup table { border-collapse: collapse; border-radius: 5px; width: 100%; background-color: var(--color-wk-panel-background, #000); } .summary-popup td { border: none; padding: 5px; text-align: center; }";
     style.textContent += ".summary-popup h1 { margin-bottom: 10px; font-weight: bold; font-size: var(--font-size-xlarge); } .summary-popup h2 { font-weight: bold; margin-top: 20px; padding: 20px; color: #fff; font-size: var(--font-size-large); border-radius: 5px 5px 0 0; }";
@@ -43,7 +44,7 @@
     style.textContent += ".summary-popup .summary-popup__popup--left:after { right: 15px; } .summary-popup .summary-popup__popup--right:after { left: 25px; }";
     style.textContent += ".summary-popup .accuracy-graph { position: relative; height: " + (GRAPH_HEIGHT + 42) + "px; width: 100%; background-color: var(--color-wk-panel-background, #fff); padding: 25px 1% 15px 1%; border-radius: 0 0 5px 5px; }";
     style.textContent += ".summary-popup .accuracy-graph span { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: var(--font-size-xlarge); color: var(--color-text); }";
-    style.textContent += ".summary-popup ul .wk-icon { position: absolute; top: -8px; right: -8px; font-size: var(--font-size-xsmall); width: 1.5em; text-align: center; color: white; background-color: var(--color-burned); padding: 3px; border-radius: 50%; border: white solid 1px; }";
+    style.textContent += ".summary-popup ul .wk-icon { position: absolute; top: -8px; right: -8px; text-align: center; color: white; background-color: var(--color-burned); padding: 3px; border-radius: 50%; border: white solid 1px }";
     style.textContent += ".summary-popup ul .incorrect-text { color: var(--color-incorrect, #cc4343); font-size: var(--font-size-small); vertical-align: top; }";
     if(window.matchMedia('(prefers-color-scheme: dark)').matches) style.textContent += ".summary-popup ul .incorrect-text { filter: brightness(2) }";
 
@@ -63,7 +64,6 @@
 
     function injectEndCode() {
         // Clear the data-quiz-queue-done-url-value and data-quiz-queue-completion-url-value parameters on #quiz-queue
-        //document.getElementById("quiz-queue").setAttribute("data-quiz-queue-done-url-value", "");
         function get_controller(name) { // Thanks to @rfindley for this function
             return Stimulus.getControllerForElementAndIdentifier(document.querySelector(`[data-controller~="${name}"]`),name);
         }
@@ -133,8 +133,7 @@
     // Function to create summary section
     function createSummarySectionTitle(title, icon, bgColor) {
         let sectionTitle = document.createElement("h2");
-        let sectionTitleIcon = document.createElement("span");
-        sectionTitleIcon.classList = "wk-icon fa-solid " + icon;
+        let sectionTitleIcon = wkIcon(icon);
         sectionTitle.appendChild(sectionTitleIcon);
         sectionTitle.innerHTML += " " + title;
         sectionTitle.style.backgroundColor = bgColor;
@@ -213,8 +212,7 @@
         if (itemsList.length > 0) {
             // Create a heading element with some text and styles
             let headingText = document.createElement("h1");
-            let headingImage = document.createElement("span");
-            headingImage.classList = "wk-icon fa-solid fa-square-check";
+            let headingImage = wkIcon("check-checked");
             headingText.appendChild(headingImage);
             headingText.innerHTML += " Review Summary";
             let heading = document.createElement("div");
@@ -254,13 +252,11 @@
 
                 // Badge if burned or if warning
                 if(itemsList[i].newSRS == 9) {
-                    let badge = document.createElement("span");
-                    badge.classList = "wk-icon fa-solid fa-fire";
+                    let badge = wkIcon("sparkles");
                     listItemLink.style.paddingRight = "15px";
                     listItemLink.appendChild(badge);
                 } else if(itemsList[i].isWarning) {
-                    let badge = document.createElement("span");
-                    badge.classList = "wk-icon fa-solid fa-skull-crossbones";
+                    let badge = wkIcon("exclamation");
                     listItemLink.style.paddingRight = "15px";
                     listItemLink.appendChild(badge);
                 }
@@ -346,13 +342,13 @@
             let table = createTable(data);
 
             // Create h2 titles for the lists
-            let correctTitle = createSummarySectionTitle(srsUpNum + " Items SRS Up", "fa-circle-up", "var(--color-quiz-correct-background, #88cc00)");
-            let incorrectTitle = createSummarySectionTitle((itemsList.length - srsUpNum) + " Items SRS Down", "fa-circle-down", "var(--color-quiz-incorrect-background, #ff0033)");
+            let correctTitle = createSummarySectionTitle(srsUpNum + " Items SRS Up", "srs-up", "var(--color-quiz-correct-background, #88cc00)");
+            let incorrectTitle = createSummarySectionTitle((itemsList.length - srsUpNum) + " Items SRS Down", "srs-down", "var(--color-quiz-incorrect-background, #ff0033)");
 
             // Create a graph showing accuracy throughout the session using the correctHistory array, with an average of 3 elements
             let graphTitle, graphDiv;
             if(itemsList.length > 4) {
-                graphTitle = createSummarySectionTitle(" Session Accuracy", "fa-chart-simple", "var(--color-menu, #777)");
+                graphTitle = createSummarySectionTitle(" Session Accuracy", "chat", "var(--color-menu, #777)");
                 // Graph
                 graphDiv = document.createElement("div");
                 graphDiv.classList = "accuracy-graph";
@@ -372,7 +368,7 @@
             // Create a graph showing accuracy throughout the last 10 (or less) sessions
             let graphTitle2, graphDiv2;
             if(accuracyArray.length > 3) {
-                graphTitle2 = createSummarySectionTitle(" Accuracy History", "fa-clock-rotate-left", "var(--color-menu, #777)");
+                graphTitle2 = createSummarySectionTitle(" Accuracy History", "clock", "var(--color-menu, #777)");
                 // Graph
                 graphDiv2 = document.createElement("div");
                 graphDiv2.classList = "accuracy-graph";
@@ -486,7 +482,13 @@
         currentCategory = e.detail.subject.type;
         currentWord = e.detail.subject.characters;
 
-        currentSRSLevel = quizQueueSRS.find(function(element) { return element[0] == e.detail.subject.id; })[1];
+        currentSRSLevel = quizQueueSRS.find(function(element) { return element[0] == e.detail.subject.id; });
+        if(currentSRSLevel == undefined) {
+            getQuizQueueSRS();
+            currentSRSLevel = quizQueueSRS.find(function(element) { return element[0] == e.detail.subject.id; });
+            if(currentSRSLevel == undefined) currentSRSLevel = [e.detail.subject.id, 10];
+        }
+        currentSRSLevel = currentSRSLevel[1];
         if(currentSRSLevel == null) {
             getQuizQueueSRS();
             currentSRSLevel = quizQueueSRS.find(function(element) { return element[0] == e.detail.subject.id; })[1];
@@ -523,4 +525,15 @@
         }
     });
 
+    function wkIcon(iconName) {
+        let icon = document.createElement("svg");
+        icon.classList = "wk-icon wk-icon--" + iconName;
+        icon.setAttribute("viewBox", "0 0 512 512");
+
+        let use = document.createElement("use");
+        use.setAttribute("href", "#wk-icon__" + iconName);
+        icon.appendChild(use);
+
+        return icon;
+    }
 })();
