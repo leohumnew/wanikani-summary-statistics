@@ -1,11 +1,12 @@
 // ==UserScript==
 // @name Wanikani Review Summary
 // @namespace https://tampermonkey.net/
-// @version 0.5.6
+// @version 0.5.7
 // @license MIT
 // @description Show a popup with statistics about the review session when returning to the dashboard
 // @author leohumnew
 // @match https://www.wanikani.com/subjects/review
+// @require https://greasyfork.org/scripts/489759-wk-custom-icons/code/CustomIcons.js?version=1342884
 // @grant none
 // ==/UserScript==
 
@@ -133,8 +134,7 @@
     // Function to create summary section
     function createSummarySectionTitle(title, icon, bgColor) {
         let sectionTitle = document.createElement("h2");
-        let sectionTitleIcon = wkIcon(icon);
-        sectionTitle.appendChild(sectionTitleIcon);
+        sectionTitle.appendChild(Icons.customIcon(icon));
         sectionTitle.innerHTML += " " + title;
         sectionTitle.style.backgroundColor = bgColor;
         return sectionTitle;
@@ -212,8 +212,7 @@
         if (itemsList.length > 0) {
             // Create a heading element with some text and styles
             let headingText = document.createElement("h1");
-            let headingImage = wkIcon("check-checked");
-            headingText.appendChild(headingImage);
+            headingText.appendChild(Icons.customIcon("check-checked"));
             headingText.innerHTML += " Review Summary";
             let heading = document.createElement("div");
             heading.append(headingText);
@@ -252,13 +251,11 @@
 
                 // Badge if burned or if warning
                 if(itemsList[i].newSRS == 9) {
-                    let badge = wkIcon("sparkles");
                     listItemLink.style.paddingRight = "15px";
-                    listItemLink.appendChild(badge);
+                    listItemLink.appendChild(Icons.customIcon("fire"));
                 } else if(itemsList[i].isWarning) {
-                    let badge = wkIcon("exclamation");
                     listItemLink.style.paddingRight = "15px";
-                    listItemLink.appendChild(badge);
+                    listItemLink.appendChild(Icons.customIcon("exclamation"));
                 }
 
                 // Create popup with meaning and reading info on hover
@@ -348,7 +345,7 @@
             // Create a graph showing accuracy throughout the session using the correctHistory array, with an average of 3 elements
             let graphTitle, graphDiv;
             if(itemsList.length > 4) {
-                graphTitle = createSummarySectionTitle(" Session Accuracy", "chat", "var(--color-menu, #777)");
+                graphTitle = createSummarySectionTitle(" Session Accuracy", "chart-line", "var(--color-menu, #777)");
                 // Graph
                 graphDiv = document.createElement("div");
                 graphDiv.classList = "accuracy-graph";
@@ -368,7 +365,7 @@
             // Create a graph showing accuracy throughout the last 10 (or less) sessions
             let graphTitle2, graphDiv2;
             if(accuracyArray.length > 3) {
-                graphTitle2 = createSummarySectionTitle(" Accuracy History", "clock", "var(--color-menu, #777)");
+                graphTitle2 = createSummarySectionTitle(" Accuracy History", "chart-line", "var(--color-menu, #777)");
                 // Graph
                 graphDiv2 = document.createElement("div");
                 graphDiv2.classList = "accuracy-graph";
@@ -524,16 +521,4 @@
             window.location.href = "https://www.wanikani.com/dashboard";
         }
     });
-
-    function wkIcon(iconName) {
-        let icon = document.createElement("svg");
-        icon.classList = "wk-icon wk-icon--" + iconName;
-        icon.setAttribute("viewBox", "0 0 512 512");
-
-        let use = document.createElement("use");
-        use.setAttribute("href", "#wk-icon__" + iconName);
-        icon.appendChild(use);
-
-        return icon;
-    }
 })();
