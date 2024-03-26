@@ -1,12 +1,12 @@
 // ==UserScript==
 // @name Wanikani Review Summary
 // @namespace https://tampermonkey.net/
-// @version 0.5.7
+// @version 0.5.9
 // @license MIT
 // @description Show a popup with statistics about the review session when returning to the dashboard
 // @author leohumnew
 // @match https://www.wanikani.com/subjects/review
-// @require https://greasyfork.org/scripts/489759-wk-custom-icons/code/CustomIcons.js?version=1342884
+// @require https://greasyfork.org/scripts/489759-wk-custom-icons/code/CustomIcons.js?version=1347928
 // @grant none
 // ==/UserScript==
 
@@ -255,7 +255,7 @@
                     listItemLink.appendChild(Icons.customIcon("fire"));
                 } else if(itemsList[i].isWarning) {
                     listItemLink.style.paddingRight = "15px";
-                    listItemLink.appendChild(Icons.customIcon("exclamation"));
+                    listItemLink.appendChild(Icons.customIcon("warning"));
                 }
 
                 // Create popup with meaning and reading info on hover
