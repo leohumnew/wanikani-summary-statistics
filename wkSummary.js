@@ -1,12 +1,12 @@
 // ==UserScript==
 // @name Wanikani Review Summary
 // @namespace https://tampermonkey.net/
-// @version 0.5.9
+// @version 0.6.0
 // @license MIT
 // @description Show a popup with statistics about the review session when returning to the dashboard
 // @author leohumnew
 // @match https://www.wanikani.com/subjects/review
-// @require https://greasyfork.org/scripts/489759-wk-custom-icons/code/CustomIcons.js?version=1347928
+// @require https://greasyfork.org/scripts/489759-wk-custom-icons/code/CustomIcons.js?version=1398753
 // @grant none
 // ==/UserScript==
 
