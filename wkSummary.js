@@ -1,12 +1,12 @@
 // ==UserScript==
 // @name Wanikani Review Summary
 // @namespace https://tampermonkey.net/
-// @version 0.6.1
+// @version 0.6.2
 // @license MIT
 // @description Show a popup with statistics about the review session when returning to the dashboard
 // @author leohumnew
 // @match https://www.wanikani.com/*
-// @require https://greasyfork.org/scripts/489759-wk-custom-icons/code/CustomIcons.js?version=1398753
+// @require https://greasyfork.org/scripts/489759-wk-custom-icons/code/CustomIcons.js?version=1417568
 // @grant none
 // ==/UserScript==
 
@@ -72,12 +72,13 @@
 
         // Function to get quiz queue SRS
         async function getQuizQueueSRS() {
-            let elementArr = document.querySelectorAll("#quiz-queue script[data-quiz-queue-target='subjectIdsWithSRS']");
-            if(elementArr.length > 0) quizQueueSRS = JSON.parse(elementArr[0].innerHTML);
-            else setTimeout(getQuizQueueSRS, 500);
+            let elementArr = document.querySelector("#quiz-queue script[data-quiz-queue-target='subjectIdsWithSRS']");
+            if(elementArr) {
+                quizQueueSRS = JSON.parse(elementArr.innerHTML);
+                quizQueueSRS = quizQueueSRS.subject_ids_with_srs_info;
+            } else setTimeout(getQuizQueueSRS, 500);
         }
-        await getQuizQueueSRS();
-        console.log(quizQueueSRS);
+        getQuizQueueSRS();
 
         function injectEndCode() {
             // Clear the data-quiz-queue-done-url-value and data-quiz-queue-completion-url-value parameters on #quiz-queue
@@ -537,7 +538,6 @@
             }
         }
         getHomeButton();
-        
 
         // If statistics screen is open, set the right arrow key and the escape key to go back to the dashboard
         document.addEventListener("keydown", function(e) {
