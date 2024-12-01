@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name Wanikani Review Summary
 // @namespace https://tampermonkey.net/
-// @version 0.6.2
+// @version 0.6.5
 // @license MIT
 // @description Show a popup with statistics about the review session when returning to the dashboard
 // @author leohumnew
@@ -13,14 +13,30 @@
 (function() {
     'use strict';
 
-    if (window.location.href === "https://www.wanikani.com/subjects/review") {
+    let eventListenersAdded = false;
+
+    window.addEventListener("turbo:load", function(e) {
+        if (e.detail.url === "https://www.wanikani.com/subjects/review") {
+            setTimeout(runScript, 0);
+        }
+    });
+    if ("https://www.wanikani.com/subjects/review" === (window.Turbo?.session.history.pageLoaded ? window.Turbo.session.history.location.href : (document.readyState === "complete" ? window.location.href : null))) {
         runScript();
-    } else {
-        window.addEventListener("turbo:render", function(e) {
-            if (window.location.href === "https://www.wanikani.com/subjects/review") {
-                runScript();
+    }
+    function keyListener(e) {
+        // If statistics screen is open, set the right arrow key and the escape key to go back to the dashboard
+        if (document.getElementById("summary-popup") != null) {
+            switch (e.key) {
+                case "ArrowRight":
+                case "Enter":
+                case "Escape":
+                    e.preventDefault();
+                    document.body.removeEventListener("keydown", keyListener);
+                    if (window.Turbo) window.Turbo.visit("https://www.wanikani.com/dashboard");
+                    else window.location.href = "https://www.wanikani.com/dashboard";
+                    break;
             }
-        });
+        }
     }
 
     async function runScript() {
@@ -86,7 +102,7 @@
                 return Stimulus.getControllerForElementAndIdentifier(document.querySelector(`[data-controller~="${name}"]`),name);
             }
             let quizQueueController = get_controller("quiz-queue");
-            let quizOnDoneReplacement = function() { showStatistics(); };
+            let quizOnDoneReplacement = function() { setTimeout(showStatistics, 0); };
             quizQueueController.onDone = quizOnDoneReplacement.bind(quizQueueController);
             quizQueueController.quizQueue.onDone = quizQueueController.onDone;
         }
@@ -95,6 +111,7 @@
         function createPopup(content) {
             // Create a div element with some styles
             let popup = document.createElement("div");
+            popup.id = "summary-popup";
             popup.className = "summary-popup";
 
             // Create a close button with some styles and functionality
@@ -102,7 +119,8 @@
             closeButton.textContent = "Dashboard";
             closeButton.href = "https://www.wanikani.com/dashboard";
             closeButton.addEventListener('click', function() {
-                document.querySelector('.summary-popup')?.remove();
+                document.body.removeEventListener("keydown", keyListener);
+                document.getElementById('summary-popup')?.remove();
             });
 
             // Append the content and the close button to the popup
@@ -302,10 +320,10 @@
                             }
                         }
                     }
-                    else if(itemsList[i].type != "Radical" && itemsList[i].readings[0] != null) { // Reading if vocabulary
+                    else if(itemsList[i].type != "Radical" && itemsList[i].readings.length > 0) { // Reading if vocabulary
                         typeNum[2]++;
                         popup.innerHTML += "<br>Reading: <strong>" +
-                                        itemsList[i].readings.map(r => r.reading).join(", ") +
+                                        itemsList[i].readings.join(", ") +
                                         "</strong>";
                     } else { // No reading if radical
                         typeNum[0]++;
@@ -399,7 +417,9 @@
                 content.append(heading, table, incorrectTitle, listIncorrect, correctTitle, listCorrect, graphTitle ? graphTitle : "", graphDiv ? graphDiv : "", graphTitle2 ? graphTitle2 : "", graphDiv2 ? graphDiv2 : "");
                 // Create a popup element with all the summary content
                 let popup = createPopup(content);
-                document.body.appendChild(popup);
+                (document.getElementById('turbo-body') ?? document.body).appendChild(popup);
+
+                document.body.addEventListener("keydown", keyListener);
 
                 // If it exists, fill the graph with the correctHistory array
                 if(graphDiv) {
@@ -415,7 +435,7 @@
                 if(graphDiv2) {
                     let graph = graphDiv2.querySelector("canvas");
                     createGraph(accuracyArray.map(tuple => tuple[0]), graph, "🎊 Perfect history! 🎊", accuracyArray.map(tuple => tuple[1]));
-                }                
+                }
 
                 // Reset the statistics variables
                 questionsAnswered = 0;
@@ -427,100 +447,100 @@
                 readingIncorrect = 0;
                 itemsList = [];
             } else {
-                window.location.href = "https://www.wanikani.com/dashboard";
+                if (window.Turbo) window.Turbo.visit("https://www.wanikani.com/dashboard");
+                else window.location.href = "https://www.wanikani.com/dashboard";
             }
         }
 
-        let eventToObserve = window.doublecheck == null ? "didAnswerQuestion" : "didFinalAnswer";
-        // Add an event listener for the didAnswerQuestion event
-        window.addEventListener(eventToObserve, function(e) {
-            if(questionsAnswered == 0) {
-                injectEndCode();
-            }
-            // Check if the answer was correct or not by looking for the correct attribute
-            let correct = document.querySelector(".quiz-input__input-container[correct='true']") !== null;
-            correctHistory.push(correct);
+        function addEventListeners() {
+            if (eventListenersAdded) return;
+            eventListenersAdded = true;
 
-            // Record the answer entered if incorrect
-            if (!correct) {
-                if(!incorrectEntered.has(e.detail.subjectWithStats.subject.id)) incorrectEntered.set(e.detail.subjectWithStats.subject.id, [[], []]);
-                if(currentQuestionType === "meaning") incorrectEntered.get(e.detail.subjectWithStats.subject.id)[0].push(e.detail.answer);
-                else if(currentQuestionType === "reading") incorrectEntered.get(e.detail.subjectWithStats.subject.id)[1].push(e.detail.answer);
-            }
-
-            // Increment the questions answered and correct/incorrect counters
-            questionsAnswered++;
-            if (currentQuestionType === "meaning") {
-                correct ? meaningCorrect++ : meaningIncorrect++;
-            } else if (currentQuestionType === "reading") {
-                correct ? readingCorrect++ : readingIncorrect++;
-            }
-            if (correct) itemsCorrect++;
-            else itemsIncorrect++;
-        });
-
-        // Add an event listener for the didCompleteSubject event
-        window.addEventListener("didCompleteSubject", function(e) {
-            // Get the subject data from the event detail
-            let subject = e.detail.subjectWithStats.subject;
-            let didSRSUp = e.detail.subjectWithStats.stats.meaning.incorrect === 0 && e.detail.subjectWithStats.stats.reading.incorrect === 0;
-            let reading = null;
-            if(subject.type == "Vocabulary" || subject.type == "KanaVocabulary") {
-                reading = subject.readings;
-            } else if (subject.type == "Kanji") {
-                reading = [null, null, null];
-                if(subject.nanori.length > 0) {
-                    reading[0] = subject.nanori;
+            let eventToObserve = window.doublecheck == null ? "didAnswerQuestion" : "didFinalAnswer";
+            // Add an event listener for the didAnswerQuestion event
+            window.addEventListener(eventToObserve, function(e) {
+                if(questionsAnswered == 0) {
+                    injectEndCode();
                 }
-                if(subject.onyomi.length > 0) {
-                    reading[1] = subject.onyomi;
+                // Check if the answer was correct or not by looking for the correct attribute
+                let correct = document.querySelector(".quiz-input__input-container[correct='true']") !== null;
+                correctHistory.push(correct);
+
+                // Record the answer entered if incorrect
+                if (!correct) {
+                    if(!incorrectEntered.has(e.detail.subjectWithStats.subject.id)) incorrectEntered.set(e.detail.subjectWithStats.subject.id, [[], []]);
+                    if(currentQuestionType === "meaning") incorrectEntered.get(e.detail.subjectWithStats.subject.id)[0].push(e.detail.answer);
+                    else if(currentQuestionType === "reading") incorrectEntered.get(e.detail.subjectWithStats.subject.id)[1].push(e.detail.answer);
                 }
-                if(subject.kunyomi.length > 0) {
-                    reading[2] = subject.kunyomi;
+
+                // Increment the questions answered and correct/incorrect counters
+                questionsAnswered++;
+                if (currentQuestionType === "meaning") {
+                    correct ? meaningCorrect++ : meaningIncorrect++;
+                } else if (currentQuestionType === "reading") {
+                    correct ? readingCorrect++ : readingIncorrect++;
                 }
-            }
+                if (correct) itemsCorrect++;
+                else itemsIncorrect++;
+            });
 
-            let isWarning = e.detail.subjectWithStats.stats.meaning.incorrect + e.detail.subjectWithStats.stats.reading.incorrect > 2 || (e.detail.subjectWithStats.stats.meaning.incorrect > 0 && e.detail.subjectWithStats.stats.reading.incorrect > 0);
+            // Add an event listener for the didCompleteSubject event
+            window.addEventListener("didCompleteSubject", function(e) {
+                // Get the subject data from the event detail
+                let subject = e.detail.subjectWithStats.subject;
+                let didSRSUp = e.detail.subjectWithStats.stats.meaning.incorrect === 0 && e.detail.subjectWithStats.stats.reading.incorrect === 0;
+                let reading = null;
+                if(subject.type == "Vocabulary" || subject.type == "KanaVocabulary") {
+                    reading = subject.readings?.filter(m => ["primary", "alternative"].includes(m.kind)).map(m => m.text);
+                } else if (subject.type == "Kanji") {
+                    reading = [
+                        subject.readings?.filter(r => r.type === "nanori").map(r => r.text),
+                        subject.readings?.filter(r => r.type === "onyomi").map(r => r.text),
+                        subject.readings?.filter(r => r.type === "kunyomi").map(r => r.text),
+                    ].map(r => r?.length > 0 ? r : null);
+                }
 
-            // Calculate the new SRS level
-            let newSRSLevel = didSRSUp ? currentSRSLevel + 1 : (currentSRSLevel < 2 ? currentSRSLevel : (currentSRSLevel < 5 ? currentSRSLevel - 1 : currentSRSLevel - 2));
-            console.log(subject.characters + " - Old SRS Level: " + SRSLevelNames[currentSRSLevel] + " New SRS Level: " + SRSLevelNames[newSRSLevel]);
+                let isWarning = e.detail.subjectWithStats.stats.meaning.incorrect + e.detail.subjectWithStats.stats.reading.incorrect > 2 || (e.detail.subjectWithStats.stats.meaning.incorrect > 0 && e.detail.subjectWithStats.stats.reading.incorrect > 0);
 
-            // Push the subject data to the items list array
-            let subjectInfoToSave = { characters: subject.characters, type: subject.type, id: subject.id, SRSUp: didSRSUp, meanings: subject.meanings, readings: reading, oldSRS: currentSRSLevel, newSRS: newSRSLevel, isWarning: isWarning, incorrectEntered: incorrectEntered.get(subject.id) };
-            itemsList.push(subjectInfoToSave);
-        });
+                // Calculate the new SRS level
+                let newSRSLevel = didSRSUp ? currentSRSLevel + 1 : (currentSRSLevel < 2 ? currentSRSLevel : (currentSRSLevel < 5 ? currentSRSLevel - 1 : currentSRSLevel - 2));
+                console.log(subject.characters + " - Old SRS Level: " + SRSLevelNames[currentSRSLevel] + " New SRS Level: " + SRSLevelNames[newSRSLevel]);
 
-        // Add an event listener for the willShowNextQuestion event
-        window.addEventListener("willShowNextQuestion", function(e) {
-            // Set current question variables with event info
-            currentQuestionType = e.detail.questionType;
-            currentCategory = e.detail.subject.type;
-            currentWord = e.detail.subject.characters;
+                // Push the subject data to the items list array
+                let subjectInfoToSave = { characters: subject.characters, type: subject.type, id: subject.id, SRSUp: didSRSUp, meanings: subject.meanings?.filter(m => ["primary", "alternative"].includes(m.kind)).map(m => m.text), readings: reading, oldSRS: currentSRSLevel, newSRS: newSRSLevel, isWarning: isWarning, incorrectEntered: incorrectEntered.get(subject.id) };
+                itemsList.push(subjectInfoToSave);
+            }, {passive: true});
 
-            currentSRSLevel = quizQueueSRS.find(function(element) { return element[0] == e.detail.subject.id; });
-            if(currentSRSLevel == undefined) {
-                getQuizQueueSRS();
+            // Add an event listener for the willShowNextQuestion event
+            window.addEventListener("willShowNextQuestion", function(e) {
+                // Set current question variables with event info
+                currentQuestionType = e.detail.questionType;
+                currentCategory = e.detail.subject.type;
+                currentWord = e.detail.subject.characters;
+
                 currentSRSLevel = quizQueueSRS.find(function(element) { return element[0] == e.detail.subject.id; });
-                if(currentSRSLevel == undefined) currentSRSLevel = [e.detail.subject.id, 10];
-            }
-            currentSRSLevel = currentSRSLevel[1];
-            if(currentSRSLevel == null) {
-                getQuizQueueSRS();
-                currentSRSLevel = quizQueueSRS.find(function(element) { return element[0] == e.detail.subject.id; })[1];
-                if(currentSRSLevel == null) currentSRSLevel = 10;
-            }
-        });
+                if(currentSRSLevel == undefined) {
+                    getQuizQueueSRS();
+                    currentSRSLevel = quizQueueSRS.find(function(element) { return element[0] == e.detail.subject.id; });
+                    if(currentSRSLevel == undefined) currentSRSLevel = [e.detail.subject.id, 10];
+                }
+                currentSRSLevel = currentSRSLevel[1];
+                if(currentSRSLevel == null) {
+                    getQuizQueueSRS();
+                    currentSRSLevel = quizQueueSRS.find(function(element) { return element[0] == e.detail.subject.id; })[1];
+                    if(currentSRSLevel == null) currentSRSLevel = 10;
+                }
+            }, {passive: true});
 
-        // Add an event listener for the turbo before-visit event
-        window.addEventListener("turbo:before-visit", function(e) {
-            // Show stats if .summary-popup is not already visible and there are items reviewed
-            if (document.querySelector(".summary-popup") === null && questionsAnswered > 0) {
-                e.preventDefault();
-                showStatistics();
-            }
-
-        });
+            // Add an event listener for the turbo before-visit event
+            window.addEventListener("turbo:before-visit", function(e) {
+                // Show stats if .summary-popup is not already visible and there are items reviewed
+                if (questionsAnswered > 0 && document.getElementById("summary-popup") == null) {
+                    e.preventDefault();
+                    setTimeout(showStatistics, 0);
+                }
+            });
+        }
 
         // Home button override
         async function getHomeButton() {
@@ -530,21 +550,15 @@
                 homeButton.setAttribute("title", "Show statistics and return to dashboard");
                 homeButton.addEventListener("click", function(e) {
                     // Show stats if .summary-popup is not already visible and there are items reviewed
-                    if (document.querySelector(".summary-popup") === null && questionsAnswered > 0) {
+                    if (questionsAnswered > 0 && document.getElementById("summary-popup") == null) {
                         e.preventDefault();
-                        showStatistics();
+                        setTimeout(showStatistics, 0);
                     }
                 });
             }
         }
-        getHomeButton();
 
-        // If statistics screen is open, set the right arrow key and the escape key to go back to the dashboard
-        document.addEventListener("keydown", function(e) {
-            if (document.querySelector(".summary-popup") !== null && (e.key === "ArrowRight" || e.key === "Escape")) {
-                e.preventDefault();
-                window.location.href = "https://www.wanikani.com/dashboard";
-            }
-        });
+        addEventListeners();
+        getHomeButton();
     }
 })();
